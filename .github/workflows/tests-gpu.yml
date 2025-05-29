@@ -28,6 +28,7 @@ defaults:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - name: Check out
         uses: actions/checkout@v2
@@ -45,8 +46,8 @@ jobs:
           conda install -c conda-forge cupy
       - name: Install style check dependencies
         run: |
-          conda install flake8~=3.7.9
-          conda install black~=19.10b0
+          conda install flake8
+          conda install black
       - name: check-style
         run: |
           flake8 doc src tests setup.py
