@@ -11,7 +11,6 @@ from qutip_cupy.expectation import expect_cupydense
 import qutip.tests.core.data.test_mathematics as test_tools
 import qutip.tests.core.data.test_reshape as test_reshape_tools
 import qutip.tests.core.data.test_expect as test_expect_tools
-from qutip.core.data import Data
 
 
 def random_cupydense(shape):

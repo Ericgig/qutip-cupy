@@ -9,7 +9,8 @@ try:
     __import__("cupy")
 except ModuleNotFoundError:
     raise RuntimeError(
-        "qutip_cupy requires cupy to be installed, please install cupy by following "
+        "qutip_cupy requires cupy to be installed, "
+        "please install cupy by following "
         "the instructions at https://docs.cupy.dev/en/stable/install.html"
     )
 
@@ -67,8 +68,12 @@ data.tidyup.add_specialisations([(CuPyDense, cdf.tidyup_dense)])
 data.trace.add_specialisations([(CuPyDense, cdf.trace_cupydense)])
 
 data.reshape.add_specialisations([(CuPyDense, CuPyDense, cdf.reshape_cupydense)])
-data.column_stack.add_specialisations([(CuPyDense, CuPyDense, cdf.column_stack_cupydense)])
-data.column_unstack.add_specialisations([(CuPyDense, CuPyDense, cdf.column_unstack_cupydense)])
+data.column_stack.add_specialisations(
+    [(CuPyDense, CuPyDense, cdf.column_stack_cupydense)]
+)
+data.column_unstack.add_specialisations(
+    [(CuPyDense, CuPyDense, cdf.column_unstack_cupydense)]
+)
 data.split_columns.add_specialisations([(CuPyDense, cdf.split_columns_cupydense)])
 
 data.inner.add_specialisations([(CuPyDense, CuPyDense, cdf.inner_cupydense)])
