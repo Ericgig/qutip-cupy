@@ -1,5 +1,6 @@
 """Contains specialization functions for dense_cupy. These are the functions that
  are defined outside of qutip/core/data/dense.pyx."""
+
 import cupy as cp
 
 from .dense import CuPyDense
@@ -16,9 +17,7 @@ def reshape_cupydense(cp_arr, n_rows_out, n_cols_out):
 
 
 def column_stack_cupydense(cp_arr):
-    return CuPyDense._raw_cupy_constructor(
-        cp.reshape(cp_arr._cp, (-1, 1), order="F")
-    )
+    return CuPyDense._raw_cupy_constructor(cp.reshape(cp_arr._cp, (-1, 1), order="F"))
 
 
 def column_unstack_cupydense(cp_arr, rows):

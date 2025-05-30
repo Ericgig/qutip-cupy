@@ -135,9 +135,7 @@ def identity(dimension, scale=1, fortran=True):
     return CuPyDense._raw_cupy_constructor(cparr)
 
 
-def _diagonal_length(
-    offset, n_rows, n_cols,
-):
+def _diagonal_length(offset, n_rows, n_cols):
     if offset > 0:
         return n_rows if offset <= n_cols - n_rows else n_cols - offset
     return n_cols if offset > n_cols - n_rows else n_rows + offset

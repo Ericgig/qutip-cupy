@@ -14,8 +14,8 @@ def shape(request):
 
 
 class TestCuPyDenseDispatch:
-    """ Tests if the methods and conversions have been
-        succesfully registered to QuTiP's Data Layer."""
+    """Tests if the methods and conversions have been
+    succesfully registered to QuTiP's Data Layer."""
 
     def test_conversion_cycle(self, shape):
 
@@ -28,7 +28,7 @@ class TestCuPyDenseDispatch:
 
 
 class TestCuPyDense:
-    """ Tests of the methods and constructors of the CuPyDense class. """
+    """Tests of the methods and constructors of the CuPyDense class."""
 
     @pytest.mark.parametrize(["shape"], [pytest.param((5,)), pytest.param((3))])
     def test_init_promotion_to_ket(sef, shape):

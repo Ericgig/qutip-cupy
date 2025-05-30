@@ -91,4 +91,4 @@ if __name__ == "__main__":
     create_version_py_file(options)
     # Most of the kwargs to setup are defined in setup.cfg; the only ones we
     # keep here are ones that we have done some compile-time processing on.
-    setuptools.setup(version=options["version"],)
+    setuptools.setup(version=options["version"])
