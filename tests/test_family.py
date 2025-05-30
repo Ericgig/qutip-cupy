@@ -2,7 +2,7 @@
 
 import re
 
-from qutip_qip import family
+from qutip_cupy import family
 
 
 class TestVersion:

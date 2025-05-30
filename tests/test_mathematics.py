@@ -293,7 +293,7 @@ class TestExpect(test_expect_tools.TestExpect):
 def _inv_cpd(matrix):
     # Add a diagonal so `matrix` is not singular
     return linalg.inv_cupydense(
-        matrix + dense.diags([1.1] * matrix.shape[0], [0], shape=matrix.shape)
+        matrix + dense.diags([2.0] * matrix.shape[0], [0], shape=matrix.shape)
     )
 
 
