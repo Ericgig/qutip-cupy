@@ -99,6 +99,10 @@ def cupydia_from_dia(dia):
     return CuPyDia(csp.dia_matrix(dia.as_scipy()))
 
 
+def dia_from_cupydia(cupydia):
+    return Dia((cupydia.mat.data, cupydia.mat.offsets), shape=cupydia.shape)
+
+
 def cupydia_from_cupydense(dia):
     raise NotImplementedError
 

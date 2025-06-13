@@ -1,33 +1,56 @@
 import cupy as cp
+import cupyx.scipy.sparse as csp
 import numpy as np
 import pytest
 
-from qutip_cupy import dense
+from qutip_cupy import dense, dia
 from qutip_cupy import dense_functions as cdf
+from qutip_cupy import dia_functions as cdiaf
 from qutip_cupy import linalg
-from qutip_cupy import CuPyDense
+from qutip_cupy import CuPyDense, CupyDia
 from qutip_cupy.expectation import expect_cupydense
 
 import qutip.tests.core.data.test_mathematics as test_tools
 import qutip.tests.core.data.test_reshape as test_reshape_tools
 import qutip.tests.core.data.test_expect as test_expect_tools
 from qutip.core.data import Data
+import qutip.core.data as _data
 
 
 def random_cupydense(shape):
     """Generate a random `CuPyDense` matrix with the given shape."""
-    out = (cp.random.rand(*shape) + 1j * cp.random.rand(*shape)).astype(cp.complex128)
+    out = (
+        cp.random.rand(*shape) + 1j * cp.random.rand(*shape)
+    ).astype(cp.complex128)
     out = CuPyDense._raw_cupy_constructor(out)
     return out
+
+
+def random_cupydia(shape):
+    """Generate a random `CuPyDense` matrix with the given shape."""
+    N = np.random.randint(1, shape[0] + shape[1])
+    data = (
+        cp.random.rand(N, shape[1]) + 1j * cp.random.rand(N, shape[1])
+    ).astype(cp.complex128)
+    offsets = np.arange(-shape[0] +1, shape[1])
+    np.random.shuffle(offsets)
+    offsets = offsets[:N]
+    cudia = csp.diags(data, offsets, shape=shape, format="dia")
+
+    return CuPyDia(cudia, copy=False)
 
 
 # This are the global variables of the qutip test module
 # by setting them in this way the value gets propagated to the abstract
 # mixing which in turn propagates them to the mixing and finally sets
 # the test cases when pytests are called
-test_tools._ALL_CASES = {CuPyDense: lambda shape: [lambda: random_cupydense(shape)]}
+test_tools._ALL_CASES = {
+    CuPyDense: lambda shape: [lambda: random_cupydense(shape)],
+    CuPyDia: lambda shape: [lambda: random_cupydia(shape)],
+}
 test_tools._RANDOM = {
     CuPyDense: lambda shape: [lambda: random_cupydense(shape)],
+    CuPyDia: lambda shape: [lambda: random_cupydia(shape)],
 }
 # @TODO: add a simple precision complex random generator.
 
@@ -36,61 +59,65 @@ class TestAdd(test_tools.TestAdd):
     specialisations = [
         pytest.param(dense.add_cupydense, CuPyDense, CuPyDense, CuPyDense),
         pytest.param(dense.iadd_cupydense, CuPyDense, CuPyDense, CuPyDense),
+        pytest.param(dia.add_cupydia, CuPyDia, CuPyDia, CuPyDia),
+        pytest.param(dia.iadd_cupydia, CuPyDia, CuPyDia, CuPyDia),
     ]
 
 
 class TestAdjoint(test_tools.TestAdjoint):
-
     specialisations = [
         pytest.param(dense.adjoint_cupydense, CuPyDense, CuPyDense),
+        pytest.param(dia.adjoint_cupydia, CuPyDia, CuPyDia),
     ]
 
 
 class TestConj(test_tools.TestConj):
-
     specialisations = [
         pytest.param(dense.conj_cupydense, CuPyDense, CuPyDense),
+        pytest.param(dia.conj_cupydia, CuPyDia, CuPyDia),
     ]
 
 
 class TestMatmul(test_tools.TestMatmul):
-
     specialisations = [
         pytest.param(dense.matmul_cupydense, CuPyDense, CuPyDense, CuPyDense),
+        pytest.param(dia.matmul_cupydia, CuPyDia, CuPyDia, CuPyDia),
+        pytest.param(linalg.matmul_cupydia_cupydense_cupydense, CuPyDia, CuPyDense, CuPyDense),
     ]
 
 
 class TestMul(test_tools.TestMul):
-
     specialisations = [
         pytest.param(dense.mul_cupydense, CuPyDense, CuPyDense),
+        pytest.param(dia.mul_cupydia, CuPyDia, CuPyDia),
     ]
 
 
 class TestNeg(test_tools.TestNeg):
-
     specialisations = [
         pytest.param(dense.neg_cupydense, CuPyDense, CuPyDense),
+        pytest.param(dia.neg_cupydia, CuPyDia, CuPyDia),
     ]
 
 
 class TestSub(test_tools.TestSub):
     specialisations = [
         pytest.param(dense.sub_cupydense, CuPyDense, CuPyDense, CuPyDense),
+        pytest.param(dia.sub_cupydia, CuPyDia, CuPyDia, CuPyDia),
     ]
 
 
 class TestTrace(test_tools.TestTrace):
-
     specialisations = [
         pytest.param(cdf.trace_cupydense, CuPyDense, complex),
+        pytest.param(dia.trace_cupydia, CuPyDia, complex),
     ]
 
 
 class TestTranspose(test_tools.TestTranspose):
-
     specialisations = [
         pytest.param(dense.transpose_cupydense, CuPyDense, CuPyDense),
+        pytest.param(dia.transpose_cupydia, CuPyDia, CuPyDia),
     ]
 
 
@@ -135,53 +162,65 @@ class TestHerm:
         assert cdf.isherm_cupydense(base, tol=self.tol)
         assert not cdf.isherm_cupydense(base * 1j, tol=self.tol)
 
+    def test_diagonal_elements_dia(self):
+        base = dia.diags(np.diag(np.random.rand(n)), [0])
+        assert cdiaf.isherm_cupydia(base, tol=self.tol)
+        assert not cdiaf.isherm_cupydia(base * 1j, tol=self.tol)
+
+    @pytest.mark.parametrize("size", (10, 20, 100))
+    def test_random_dia(self, size):
+        base = random_cupydia(size, size)
+        assert (
+            cdiaf.isherm_cupydia(base, tol=self.tol)
+            == _data.isherm(dia.dia_from_cupydia(cdiaf))
+        )
+        assert cdiaf.isherm_cupydia(base + base.adjoint(), tol=self.tol)
+
 
 class TestSplitColumns(test_reshape_tools.TestSplitColumns):
-
     specialisations = [
         pytest.param(cdf.split_columns_cupydense, CuPyDense, list),
     ]
 
 
 class TestColumnStack(test_reshape_tools.TestColumnStack):
-
     specialisations = [
         pytest.param(cdf.column_stack_cupydense, CuPyDense, CuPyDense),
     ]
 
 
 class TestColumnUnstack(test_reshape_tools.TestColumnUnstack):
-
     specialisations = [
         pytest.param(cdf.column_unstack_cupydense, CuPyDense, CuPyDense),
+        pytest.param(cdiaf.column_unstack_cupydia, CuPyDia, CuPyDia),
     ]
 
 
 class TestReshape(test_reshape_tools.TestReshape):
-
     specialisations = [
         pytest.param(cdf.reshape_cupydense, CuPyDense, CuPyDense),
+        pytest.param(cdiaf.reshape_cupydia, CuPyDia, CuPyDia),
     ]
 
 
 class TestInner(test_tools.TestInner):
-
     specialisations = [
         pytest.param(cdf.inner_cupydense, CuPyDense, CuPyDense, complex),
     ]
 
 
 class TestInnerOp(test_tools.TestInnerOp):
-
     specialisations = [
         pytest.param(cdf.inner_op_cupydense, CuPyDense, CuPyDense, CuPyDense, complex),
+        pytest.param(cdf.inner_op_cupydense_dia_dense, CuPyDense, CuPyDia, CuPyDense, complex),
+
     ]
 
 
 class TestKron(test_tools.TestKron):
-
     specialisations = [
         pytest.param(cdf.kron_cupydense, CuPyDense, CuPyDense, CuPyDense),
+        pytest.param(cdf.kron_cupydia, CuPyDia, CuPyDia, CuPyDia),
     ]
 
 
@@ -200,6 +239,7 @@ class TestFrobeniusNorm(test_tools.UnaryOpMixin):
 
     specialisations = [
         pytest.param(cdf.frobenius_cupydense, CuPyDense, float),
+        pytest.param(cdf.frobenius_cupydia, CuPyDia, float),
     ]
 
 
@@ -222,6 +262,7 @@ class TestL2Norm(test_tools.UnaryOpMixin):
 
     specialisations = [
         pytest.param(cdf.l2_cupydense, CuPyDense, float),
+        pytest.param(cdf.l2_cupydia, CuPyDia, float),
     ]
 
     # l2 norm actually does have bad shape, so we put that in too.
@@ -249,6 +290,7 @@ class TestMaxNorm(test_tools.UnaryOpMixin):
 
     specialisations = [
         pytest.param(cdf.max_cupydense, CuPyDense, float),
+        pytest.param(cdf.max_cupydia, CuPyDia, float),
     ]
 
 
@@ -267,25 +309,23 @@ class TestL1Norm(test_tools.UnaryOpMixin):
 
     specialisations = [
         pytest.param(cdf.one_cupydense, CuPyDense, float),
+        pytest.param(cdf.one_cupydia, CuPyDia, float),
     ]
 
 
 class TestPow(test_tools.TestPow):
-
     specialisations = [
         pytest.param(cdf.pow_cupydense, CuPyDense, CuPyDense),
     ]
 
 
 class TestProject(test_tools.TestProject):
-
     specialisations = [
         pytest.param(cdf.project_cupydense, CuPyDense, CuPyDense),
     ]
 
 
 class TestExpect(test_expect_tools.TestExpect):
-
     specialisations = [
         pytest.param(expect_cupydense, CuPyDense, CuPyDense, complex),
     ]
@@ -294,12 +334,11 @@ class TestExpect(test_expect_tools.TestExpect):
 def _inv_cpd(matrix):
     # Add a diagonal so `matrix` is not singular
     return linalg.inv_cupydense(
-        matrix + dense.diags([1.1] * matrix.shape[0], [0], shape=matrix.shape)
+        matrix + dense.diags([2.] * matrix.shape[0], [0], shape=matrix.shape)
     )
 
 
 class TestInv(test_tools.TestInv):
-
     specialisations = [
         pytest.param(_inv_cpd, CuPyDense, CuPyDense),
     ]
