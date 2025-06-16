@@ -14,4 +14,5 @@ def inv_cupydense(data):
 
 
 def matmul_cupydia_cupydense_cupydense(left, right, scale=1):
+    raise NotImplementedError
     return CuPyDense._raw_cupy_constructor(left.mat @ right._cp)

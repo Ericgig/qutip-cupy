@@ -118,7 +118,7 @@ data.tidyup.add_specialisations([(CuPyDense, cdf.tidyup_dense)])
 
 data.reshape.add_specialisations([
     (CuPyDense, CuPyDense, cdf.reshape_cupydense),
-    (CuPyDia, CuPyDia, cdiaf.reshape_cupydia),
+    # (CuPyDia, CuPyDia, cdiaf.reshape_cupydia),
 ])
 data.column_stack.add_specialisations([
     (CuPyDense, CuPyDense, cdf.column_stack_cupydense),
@@ -139,7 +139,7 @@ data.inner_op.add_specialisations([
 ])
 data.kron.add_specialisations([
     (CuPyDense, CuPyDense, CuPyDense, cdf.kron_cupydense),
-    (CuPyDia, CuPyDia, CuPyDia, cdiaf.kron_cupydia),
+    # (CuPyDia, CuPyDia, CuPyDia, cdiaf.kron_cupydia),
 ])
 
 data.norm.l2.add_specialisations([
