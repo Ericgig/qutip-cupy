@@ -119,6 +119,7 @@ class CuPyDia(data.Data):
         self.mat.__itruediv__(other)
         return self
 
+
 def zeros(rows, cols, dtype=cp.complex128):
     return CuPyDia(cps.dia_matrix(shape=(rows, cols), dtype=dtype), copy=False)
 
@@ -128,6 +129,7 @@ def identity(dimension, scale=1, dtype=cp.complex128):
     if scale != 1:
         base = base * scale
     return CuPyDia(base, copy=False)
+
 
 def diags(diagonals, offsets=None, shape=None, dtype=cp.complex128):
     base = csp.diags(diagonals, offsets, shape, dtype=dtype, format="dia")
