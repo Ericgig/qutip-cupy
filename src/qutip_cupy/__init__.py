@@ -27,8 +27,9 @@ from . import dia as cdia  # noqa: E402
 from . import dense_functions as cdf  # noqa: E402
 from . import dia_functions as cdiaf  # noqa: E402
 from . import linalg  # noqa: E402
+from .cudense import CuOperator
 
-__all__ = ["__version__", "CuPyDense", "CuPyDia"]
+__all__ = ["__version__", "CuPyDense", "CuPyDia", "CuOperator"]
 
 CuPyDense = cd.CuPyDense
 CuPyDia = cdia.CuPyDia
