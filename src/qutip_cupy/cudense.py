@@ -542,17 +542,17 @@ def dimensions_CuOperator(matrix, hilbert, order):
     In other words, the inputs to `kron` are reordered so that input `n` moves
     to position `order[n]`.
     """
-    assert matrix.hilbert_dims == hilbert
-    new = CuOperator(shape=self.shape)
+    assert _compare_hilbert(matrix.hilbert_dims, hilbert)
+    new = CuOperator(shape=matrix.shape)
     permutation = np.argsort(order)
-    new.hilbert_dims = (self.hilbert_dims[i] for i in permutation)
+    new.hilbert_dims = tuple(matrix.hilbert_dims[i] for i in permutation)
 
-    for term in self.terms:
+    for term in matrix.terms:
         copy_term = Term([], factor=term.factor)
         for pterm in term.prod_terms:
             copy_term.prod_terms.append(ProdTerm(
                 pterm.operator.copy(),
-                (order[mode] for mode in pterm.hilbert),
+                tuple(order[mode] for mode in pterm.hilbert),
                 pterm.transform,
             ))
         new.terms.append(copy_term)
