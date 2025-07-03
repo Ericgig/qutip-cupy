@@ -24,7 +24,7 @@ import numpy as np
 from qutip.core.data import Data
 from qutip.core import data as _data
 
-from .dense import CuPyDense
+from ..dense import CuPyDense
 
 # __all__ = ["CuOperator"]
 
@@ -422,9 +422,7 @@ class CuOperator(Data):
         return new
 
     def __div__(self, other):
-        new = self * (1 / other)
-        new._hilbert_space_dims = self.base._hilbert_space_dims
-        return CuOperator(new)
+        return self * (1 / other)
 
     def __matmul__(self, other):
         if not isinstance(other, CuOperator):
