@@ -35,9 +35,9 @@ class CuQobjEvo:
         self.shape = qobjevo.shape
         self.action_ready = False
         self.expect_ready = False
-        hilbert_space_dims = tuple(self.dims[0][0])
+        self.hilbert_space_dims = tuple(self.dims[0][0])
 
-        self.operator = Operator(hilbert_space_dims)
+        self.operator = Operator(self.hilbert_space_dims)
 
         for part in as_list:
             if isinstance(part, Qobj):

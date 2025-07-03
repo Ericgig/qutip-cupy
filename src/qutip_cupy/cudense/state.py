@@ -11,51 +11,33 @@ except ImportError:
     DensePureState = _Missing
     DenseMixedState = _Missing
 
+import numpy as np
+import cupy as cp
 
-from enum import Enum
 from qutip.core.data import Data
 from qutip.core import data as _data
 
 from ..dense import CuPyDense
-
-
-class Transform(Enum):
-    DIRECT = 0
-    CONJ = 1
-    TRANSPOSE = 2
-    ADJOINT = 3
-
-
-conj_transform = {
-    Transform.DIRECT : Transform.CONJ,
-    Transform.CONJ : Transform.DIRECT,
-    Transform.TRANSPOSE : Transform.ADJOINT,
-    Transform.ADJOINT : Transform.TRANSPOSE,
-}
-
-trans_transform = {
-    Transform.DIRECT : Transform.TRANSPOSE,
-    Transform.CONJ : Transform.ADJOINT,
-    Transform.TRANSPOSE : Transform.DIRECT,
-    Transform.ADJOINT : Transform.CONJ,
-}
-
-adjoint_transform = {
-    Transform.DIRECT : Transform.ADJOINT,
-    Transform.CONJ : Transform.TRANSPOSE,
-    Transform.TRANSPOSE : Transform.CONJ,
-    Transform.ADJOINT : Transform.DIRECT,
-}
+from .utils import *
 
 
 class CuState(Data):
-    def __init__(self, arg, shape=None):
-        if not isinstance(arg, (DensePureState, DenseMixedState)):
-            raise TypeError(...)
+    def __init__(self, arg, hilbert_dims=None, shape=None, copy=True):
+        if isinstance(arg, (DensePureState, DenseMixedState)):
+            base = arg
+        elif isinstance(arg, CuPyDense):
+            if arg.shape[0] == arg.shape[1]:
+                # TODO: Add sanity check for hilbert_dims
+                base = DenseMixedState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
+                base.allocate_storage(cp.array(arg.arg, copy=copy).ravel(order="F"))
+            else:
+                base = DensePureState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
+                base.allocate_storage(cp.array(arg.arg, copy=copy).ravel(order="F"))
 
-        self.base = arg
+        self.base = base
         self.transform = Transform.DIRECT
-        shape = (int(np.prod(arg.hilbert_space_dims)), ) * 2
+        # TODO: Add sanity check for shape
+        shape = (int(np.prod(base.hilbert_space_dims)), ) * 2
         super().__init__(shape=shape)
 
     def copy(self):
@@ -96,7 +78,7 @@ class CuState(Data):
 
     def __mul__(self, other):
         new = self.copy()
-        new.base.inplace_scale(other.base, other)
+        new.base.inplace_scale(other)
         return new
 
     def __div__(self, other):
@@ -140,10 +122,6 @@ def trace_cuState(mat):
     return mat.base.trace()
 
 
-def norm_cuState(mat):
-    return mat.base.norm()
-
-
 def inner_cuState(left, right, scalar_is_ket=False):
     inner = left.inner_product(right)
     if self.shape = (1, 1) and not scalar_is_ket:
@@ -155,6 +133,21 @@ def inner_cuState(left, right, scalar_is_ket=False):
 
 def kron_cuState(left, right):
     ...
+
+
+@_data.imul.register(CuState, CuState)
+def imul_cuState(mat, val):
+    return mat.base.inplace_scale(val)
+
+
+def iadd_cuState(left, right, factor=1.):
+    left.base.inplace_accumulate(right.base, factor)
+    return left
+
+
+@_data.norm.frobenius.register(CuState)
+def frobenius_cuState(mat):
+    return mat.base.norm()
 
 
 def project_cuState(ket):

@@ -17,8 +17,7 @@ class CuIntegratorVern7(IntegratorVern7):
         super().__init__(self, self.system, options)
 
     def set_state(self, t, state):
-        if not isinstance(state0, CuState):
-            state0 = _data.to(CuState, state0)
+        state = CuState(state, self.system.hilbert_space_dims)
         self._ode_solver.set_initial_value(state, t)
         self._is_set = True
 
@@ -32,8 +31,7 @@ class CuIntegratorVern9(IntegratorVern9):
         super().__init__(self, self.system, options)
 
     def set_state(self, t, state):
-        if not isinstance(state0, CuState):
-            state0 = CuState(state0, self.system.hil)
+        state = CuState(state, self.system.hilbert_space_dims)
         self._ode_solver.set_initial_value(state, t)
         self._is_set = True
 
