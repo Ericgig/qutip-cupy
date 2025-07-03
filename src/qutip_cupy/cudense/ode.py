@@ -33,7 +33,7 @@ class CuIntegratorVern9(IntegratorVern9):
 
     def set_state(self, t, state):
         if not isinstance(state0, CuState):
-            state0 = _data.to(CuState, state0)
+            state0 = CuState(state0, self.system.hil)
         self._ode_solver.set_initial_value(state, t)
         self._is_set = True
 
