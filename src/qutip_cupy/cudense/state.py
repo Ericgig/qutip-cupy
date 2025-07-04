@@ -14,8 +14,9 @@ except ImportError:
 import numpy as np
 import cupy as cp
 
-from qutip.core.data import Data
+from qutip.core.data import Data, Dense
 from qutip.core import data as _data
+from qutip import settings
 
 from ..dense import CuPyDense
 from .utils import *
@@ -26,6 +27,18 @@ class CuState(Data):
         if isinstance(arg, (DensePureState, DenseMixedState)):
             base = arg
         elif isinstance(arg, CuPyDense):
+            if hilbert_dims is None:
+                hilbert_dims = shape[:1]
+            if arg.shape[0] == arg.shape[1]:
+                # TODO: Add sanity check for hilbert_dims
+                base = DenseMixedState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
+                base.allocate_storage(cp.array(arg.arg, copy=copy).ravel(order="F"))
+            else:
+                base = DensePureState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
+                base.allocate_storage(cp.array(arg.arg, copy=copy).ravel(order="F"))
+        elif isinstance(arg, Dense):
+            if hilbert_dims is None:
+                hilbert_dims = shape[:1]
             if arg.shape[0] == arg.shape[1]:
                 # TODO: Add sanity check for hilbert_dims
                 base = DenseMixedState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
@@ -101,20 +114,35 @@ class CuState(Data):
 
 
 def CuState_from_Dense(mat):
-    ...
     return CuState(mat)
 
 
-def CuState_from_CuDense(mat):
-    ...
+def CuState_from_CuPyDense(mat):
     return CuState(mat)
 
 
 def Dense_from_CuState(mat):
-    print("converting to Dense")
-    return _data.Dense(mat.to_array())
+    # TODO: does view work with MPI
+    return _data.Dense(mat.base.view()[..., 0].reshape(mat.shape).get())
 
 
+def CuPyDense_from_CuState(mat):
+    # TODO: does view work with MPI
+    return _data.CuPyDense(mat.base.view()[..., 0].reshape(mat.shape))
+
+
+_data.to.add_conversions(
+    [
+        (CuState, _data.Dense, CuState_from_Dense),
+        # (CuOperator, CuPyDense, CuOperator_from_CuDense),
+        (CuState, _data.CuPyDense, CuState_from_CuPyDense),
+        (_data.Dense, CuState, Dense_from_CuOperator),
+        (_data.CuPyDense, CuState, Dense_from_CuOperator),
+    ]
+)
+
+
+@_data.trace.register(CuState)
 def trace_cuState(mat):
     if mat.shape[0] != mat.shape[1]:
         raise ValueError(...)
@@ -122,6 +150,7 @@ def trace_cuState(mat):
     return mat.base.trace()
 
 
+@_data.inner.register(CuState, CuState)
 def inner_cuState(left, right, scalar_is_ket=False):
     inner = left.inner_product(right)
     if self.shape = (1, 1) and not scalar_is_ket:
@@ -131,6 +160,7 @@ def inner_cuState(left, right, scalar_is_ket=False):
     return inner
 
 
+@_data.kron.register(CuState, CuState, CuState)
 def kron_cuState(left, right):
     ...
 

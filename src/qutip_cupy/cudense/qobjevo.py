@@ -1,24 +1,23 @@
+try:
+    import cuquantum.densitymat as cudense
+    Operator = cudense.Operator
+
+except ImportError:
+    class _Missing:
+        ...
+
+    cudense = None
+    Operator = _Missing
 
 
+from .cuState import zeros_like_cuState
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class CuQobjEvo:
+# TODO: Being child class of QobjEvo needed? Or duck typing good enough?
+class CuQobjEvo(QobjEvo):
     """
-    Pytree friendly QobjEvo for the Diffrax integrator.
+    A QobjEvo using cuDensity's Operator instead of qutip's cython operations.
+    Designed to use in solver only, as a static object
 
     It only support list based `QobjEvo`.
     """
@@ -38,14 +37,21 @@ class CuQobjEvo:
         self.hilbert_space_dims = tuple(self.dims[0][0])
 
         self.operator = Operator(self.hilbert_space_dims)
+        dual = qobjevo._dims.is_super
 
         for part in as_list:
             if isinstance(part, Qobj):
-                self.operator.append(part.data_as("OperatorTerm"))
+                self.operator.append(part.data.to_OperatorTerm(
+                    dual, hilbert_dims=self.hilbert_space_dims
+                ))
             elif (
                 isinstance(part, list) and isinstance(part[0], Qobj)
             ):
-                self.operator.append(part[0].data_as("OperatorTerm"), part[1])
+                qobj = part[0]
+                coeff = lambda t, _: part[1](t)
+                self.operator.append(qobj.data.to_OperatorTerm(
+                    dual, hilbert_dims=self.hilbert_space_dims
+                ), coeff)
             else:
                 raise NotImplementedError(
                     "Function based QobjEvo are not supported"
@@ -58,6 +64,8 @@ class CuQobjEvo:
         raise NotImplementedError
 
     def matmul_data(self, t, y, out=None):
+        if not isinstance(y, CuState):
+            y = CuState(y, hilbert_dims=elf.hilbert_space_dims)
         if not self.action_ready:
             self.operator.prepare_action(
                 settings.cuDensity["ctx"],
@@ -74,6 +82,8 @@ class CuQobjEvo:
         return out
 
     def expect_data(self, t, y, out=None):
+        if not isinstance(y, CuState):
+            y = CuState(y, hilbert_dims=elf.hilbert_space_dims)
         if not self.expect_ready:
             self.operator.prepare_expectation(
                 settings.cuDensity["ctx"],
@@ -86,4 +96,34 @@ class CuQobjEvo:
         return out
 
     def arguments(self, args):
+        raise NotImplementedError
+
+    def linear_map(self, op_mapping, *, _skip_check=False):
+        raise NotImplementedError
+
+    def tidyup(self, atol=1e-12):
+        raise NotImplementedError
+
+    def to(self, data_type):
+        raise NotImplementedError
+
+    def dag(self):
+        raise NotImplementedError
+
+    def conj(self):
+        raise NotImplementedError
+
+    def trans(self):
+        raise NotImplementedError
+
+    @property
+    def dtype(self):
+        return Operator
+
+    @property
+    def num_elements(self):
+        raise NotImplementedError
+
+    @property
+    def isconstant(self):
         raise NotImplementedError

@@ -361,7 +361,13 @@ class CuOperator(Data):
 
         return new
 
-    def to_OperatorTerm(self, dual=False, copy=True):
+    def to_OperatorTerm(self, dual=False, copy=True, hilbert_dims=None):
+        # TODO: Dim input instead of dual?
+        if hilbert_dims is not None:
+            self = self.copy()
+            if dual:
+                hilbert_dims = hilbert_dims + hilbert_dims
+            self._update_hilbert(hilbert_dims)
         out = 0
         if not dual:
             for term in self.terms:
@@ -391,6 +397,17 @@ def CuOperator_from_CuDense(mat):
 def Dense_from_CuOperator(mat):
     print("converting to Dense")
     return _data.Dense(mat.to_array())
+
+
+_data.to.add_conversions(
+    [
+        (CuOperator, _data.Dense, CuOperator_from_Dense),
+        (CuOperator, CuPyDense, CuOperator_from_CuDense),
+        (CuOperator, _data.Dia, CuOperator_from_Dia),
+        (_data.Dense, CuOperator, Dense_from_CuOperator, 1e10),
+    ]
+)
+_data.to.register_aliases(["densitymat_OperatorTerm", "CuOperator"], CuOperator)
 
 
 def identity_CuOperator(dimension, scale=1):
@@ -437,21 +454,16 @@ def kron_CuOperator(left, right):
     return left_ext @ right_shifted
 
 
-def dimensions_CuOperator(matrix, hilbert, order):
-    """
-    Reorder the tensor-product structure of a matrix, assuming that the
-    underlying structure is defined by `dimensions`.  For a separable system,
-    this function produces a matrix which is equivalent to having performed
-    `kron` in a different order on the separable parts.
+def extract_CuOperator(mat, format=None, copy=True):
+    # TODO: Better name, other input for dual?
+    if format not in [None, "OperatorTerm", "DualOperatorTerm"]:
+        raise ValueError(...)
 
-    For example if `a`, `b` and `c` are matrices with sizes 2, 3 and 4
-    respectively, then
-        kron(kron(c, a), b) == permute.dimensions(kron(kron(a, b), c),
-                                                  [2, 3, 4],
-                                                  [1, 2, 0])
-    In other words, the inputs to `kron` are reordered so that input `n` moves
-    to position `order[n]`.
-    """
+    dual = format == "DualOperatorTerm"
+    return mat.to_OperatorTerm(dual=dual, copy=copy)
+
+
+def dimensions_CuOperator(matrix, hilbert, order):
     assert _compare_hilbert(matrix.hilbert_dims, hilbert)
     new = CuOperator(shape=matrix.shape)
     permutation = np.argsort(order)
@@ -473,15 +485,7 @@ def dimensions_CuOperator(matrix, hilbert, order):
 ###############################################################################
 
 
-_data.to.add_conversions(
-    [
-        (CuOperator, _data.Dense, CuOperator_from_Dense),
-        # (CuOperator, CuPyDense, CuOperator_from_CuDense),
-        (CuOperator, _data.Dia, CuOperator_from_Dia),
-        (_data.Dense, CuOperator, Dense_from_CuOperator, 1e10),
-    ]
-)
-_data.to.register_aliases(["densitymat_OperatorTerm", "CuOperator"], CuOperator)
+
 
 _data.adjoint.add_specialisations([
     (CuOperator, CuOperator, CuOperator.adjoint),
@@ -535,4 +539,8 @@ _data.kron.add_specialisations([
 
 _data.permute.dimensions.add_specialisations([
     (CuOperator, CuOperator, dimensions_CuOperator),
+])
+
+_data.extract.add_specialisations([
+    (CuOperator, extract_CuOperator),
 ])

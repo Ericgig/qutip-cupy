@@ -29,7 +29,18 @@ from . import dia_functions as cdiaf  # noqa: E402
 from . import linalg  # noqa: E402
 from .cudense import CuOperator
 
-__all__ = ["__version__", "CuPyDense", "CuPyDia", "CuOperator"]
+
+__all__ = ["__version__", "CuPyDense"]
+
+
+try:
+    import cudense
+    CuState = cudense.CuState
+    CuOperator = cudense.CuOperator
+    __all__ += ["CuState", "CuOperator"]
+except ImportError:
+    pass
+
 
 CuPyDense = cd.CuPyDense
 CuPyDia = cdia.CuPyDia

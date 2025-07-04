@@ -1,4 +1,4 @@
-from qutip.solver.integrator import Integrator, IntegratorVern7, IntegratorVern9
+from qutip.solver.integrator import IntegratorVern7, IntegratorVern9
 from qutip.solver.mcsolve import MCSolver
 from qutip.solver.mesolve import MESolver
 from qutip.solver.sesolve import SESolver
