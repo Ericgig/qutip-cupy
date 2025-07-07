@@ -54,7 +54,7 @@ def _apply_transformation(oper, transform):
     return out
 
 
-def _oper_to_ElementaryOperator(oper, hilbert_dims, hilbert_idx):
+def _oper_to_ElementaryOperator(oper, hilbert_idx, hilbert_dims, copy=False):
     N = len(hilbert_idx)
     shape = (hilbert_dims[idx] for idx in hilbert_idx)
     if isinstance(oper, (DenseOperator, MultidiagonalOperator)):
@@ -101,12 +101,35 @@ def _has_dual(arg):
 
 
 class CuOperator(Data):
+    """
+    Pseudo symbolic data layer that follow a structure close to
+    cuDensity OperatorTerm.
+
+    Only support square operators.
+
+    The operator is composed by a sum of terms, which reach term composed of
+    multiple product:
+
+    op = sum_i term[i].factor * prod(term[i].prod_terms)
+
+    prod(term[i].prod_terms) =
+        expand_operator(oper[N-1]^trans[N-1], hilbert[N-1], hilbert_dims) @
+        ...
+        expand_operator(oper[1]^trans[1], hilbert[1], hilbert_dims) @
+        expand_operator(oper[0]^trans[0], hilbert[0], hilbert_dims)
+
+    This object always has (partial) knowledge of the full hilbert space.
+    There is no dual representation, super operator will have the hilbert space
+    doubled, with the operation being applied to the right first and
+    transposed.
+    """
     terms: list
     hilbert_dims: tuple
 
     def __init__(self, arg=None, shape=None, copy=True, hilbert_dims=None):
         self.terms = []
         self.hilbert_dims = ()
+        self._oper = None
         oper_shape = None
 
         if arg is None:
@@ -204,6 +227,10 @@ class CuOperator(Data):
             new_terms.append(copy_term)
         self.terms = new_terms
 
+    @property
+    def hilbert_space_dims(self):
+        return tuple(abs(i) for i in self.hilbert_dims)
+
     def copy(self, shallow=False):
         new = CuOperator(shape=self.shape, hilbert_dims=self.hilbert_dims)
         for term in self.terms:
@@ -218,7 +245,7 @@ class CuOperator(Data):
         return new
 
     def to_array(self):
-        hilbert = self.hilbert_dims
+        hilbert = self.hilbert_space_dims
         out = np.zeros(self.shape, dtype=complex)
 
         for A, term in enumerate(self.terms):
@@ -238,9 +265,9 @@ class CuOperator(Data):
                 idxs = list(range(len(hilbert)))
                 sizes = []
                 for i in prod_term.hilbert:
-                    sizes.append(abs(hilbert[idxs.pop(i)]))
+                    sizes.append(hilbert[idxs.pop(i)])
                 for i in idxs:
-                    N = abs(hilbert[i])
+                    N = hilbert[i]
                     mat = np.kron(mat, np.eye(N))
                     sizes.append(N)
                 mat = _data.permute.dimensions(
@@ -371,14 +398,33 @@ class CuOperator(Data):
         out = 0
         if not dual:
             for term in self.terms:
-                cuterm = 1
+                cuterm = OperatorTerm()
                 for pterm in term.prod_terms:
                     oper = _apply_transformation(pterm.operator, pterm.transform)
-                    oper = _oper_to_ElementaryOperator(oper, copy)
-                    cuterm = OperatorTerm((oper, pterm.hilbert)) * cuterm
+                    oper = _oper_to_ElementaryOperator(oper, pterm.hilbert, self.hilbert_space_dims, copy)
+                    cuterm = tensor_product((oper, pterm.hilbert)) * cuterm
                 out += cuterm * term.factor
         else:
-            raise NotImplementedError
+            N_hilbert = len(self.hilbert_dims) // 2
+            # TODO: make this tests weak compare?
+            assert self.hilbert_dims[:N_hilbert] == self.hilbert_dims[N_hilbert:]
+            for term in self.terms:
+                cuterm = OperatorTerm()
+                for pterm in term.prod_terms:
+                    if all(i < N_hilbert for i in pterm.hilbert):
+                        oper = _apply_transformation(pterm.operator, pterm.transform)
+                        oper = _oper_to_ElementaryOperator(oper, pterm.hilbert, self.hilbert_space_dims, copy)
+                        cuterm = tensor_product((oper, pterm.hilbert, [True])) * cuterm
+
+                    elif any(i < N_hilbert for i in pterm.hilbert):
+                        raise NotImplementedError
+
+                    else:
+                        oper = _apply_transformation(pterm.operator, pterm.transform)
+                        oper = _oper_to_ElementaryOperator(oper, pterm.hilbert, self.hilbert_space_dims, copy)
+                        cuterm = tensor_product(
+                            (oper, tuple(i - N_hilbert for i in pterm.hilbert))
+                        ) * cuterm
         return out
 
 
