@@ -3,6 +3,7 @@ try:
     MultidiagonalOperator = cudense.MultidiagonalOperator
     DenseOperator = cudense.DenseOperator
     OperatorTerm = cudense.OperatorTerm
+    tensor_product = cudense.tensor_product
     ScalarCallbackCoefficient = cudense._internal.callbacks.ScalarCallbackCoefficient
 
 except ImportError:
@@ -14,6 +15,7 @@ except ImportError:
     DenseOperator = _Missing
     OperatorTerm = _Missing
     ScalarCallbackCoefficient = _Missing
+    tensor_product = _Missing
 
 
 from enum import Enum
@@ -66,7 +68,7 @@ def _oper_to_ElementaryOperator(oper, hilbert_idx, hilbert_dims, copy=False):
             raise ValueError("Operator shape does not match hilbert spaces")
         out = oper
     elif isinstance(oper, _data.Dia) and N == 1:
-        dia_matrix = dia.as_scipy()
+        dia_matrix = oper.as_scipy()
         offsets = list(dia_matrix.offsets)
         data = np.zeros((dia_matrix.shape[0], len(offsets)), dtype=complex)
         for i, offset in enumerate(offsets):
@@ -333,6 +335,7 @@ class CuOperator(Data):
         new = self.copy()
         new._update_hilbert(other.hilbert_dims)
         other = other.copy()
+        other._update_hilbert(new.hilbert_dims)
         new.terms += other.terms
 
         return new
@@ -395,21 +398,21 @@ class CuOperator(Data):
             if dual:
                 hilbert_dims = hilbert_dims + hilbert_dims
             self._update_hilbert(hilbert_dims)
-        out = 0
+        out = OperatorTerm(dtype="complex128")
         if not dual:
             for term in self.terms:
-                cuterm = OperatorTerm()
+                cuterm = 1.
                 for pterm in term.prod_terms:
                     oper = _apply_transformation(pterm.operator, pterm.transform)
                     oper = _oper_to_ElementaryOperator(oper, pterm.hilbert, self.hilbert_space_dims, copy)
                     cuterm = tensor_product((oper, pterm.hilbert)) * cuterm
-                out += cuterm * term.factor
+                out += (cuterm * term.factor)
         else:
             N_hilbert = len(self.hilbert_dims) // 2
             # TODO: make this tests weak compare?
             assert self.hilbert_dims[:N_hilbert] == self.hilbert_dims[N_hilbert:]
             for term in self.terms:
-                cuterm = OperatorTerm()
+                cuterm = 1.
                 for pterm in term.prod_terms:
                     if all(i < N_hilbert for i in pterm.hilbert):
                         oper = _apply_transformation(pterm.operator, pterm.transform)
@@ -425,6 +428,8 @@ class CuOperator(Data):
                         cuterm = tensor_product(
                             (oper, tuple(i - N_hilbert for i in pterm.hilbert))
                         ) * cuterm
+                out += (cuterm * term.factor)
+            
         return out
 
 

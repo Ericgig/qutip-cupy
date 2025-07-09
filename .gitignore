@@ -1,6 +1,7 @@
 *~
 *.py[cod]
 *.so
+*.cpp
 .*.sw*
 .DS_Store
 .f2py_f2cmap

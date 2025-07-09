@@ -1,3 +1,8 @@
+#cython: language_level=3
+# distutils: language = c++
+# distutils: include_dirs = [/home/ericgig/cuQuantum_env/lib/python3.12/site-packages/numpy/_core/include, /home/ericgig/qutip/qutip/core/data/]
+
+
 try:
     import cuquantum.densitymat as cudense
     Operator = cudense.Operator
@@ -10,8 +15,12 @@ except ImportError:
     Operator = _Missing
 
 
-from .cuState import zeros_like_cuState
+from .state import zeros_like_cuState, CuState
+from .cudense import CuOperator
 from qutip.core.cy.qobjevo cimport QobjEvo
+from qutip.core.data cimport Data
+from qutip.settings import settings
+from qutip import Qobj
 
 # TODO: Being child class of QobjEvo needed? Or duck typing good enough?
 cdef class CuQobjEvo(QobjEvo):
@@ -21,23 +30,26 @@ cdef class CuQobjEvo(QobjEvo):
 
     It only support list based `QobjEvo`.
     """
-
-    terms: list
-    shape: tuple
-    dims: object
-    action_ready: Bool
-    expect_ready: Bool
+    cdef:
+        dict __dict__
+        # object operator
+        # tuple hilbert_space_dims
+        # bint action_ready
+        # bint expect_ready
 
     def __init__(self, qobjevo):
         as_list = qobjevo.to_list()
-        self.dims = qobjevo.dims
+        self._dims = qobjevo._dims
         self.shape = qobjevo.shape
         self.action_ready = False
         self.expect_ready = False
-        self.hilbert_space_dims = tuple(self.dims[0][0])
+        if qobjevo.issuper:
+            self.hilbert_space_dims = tuple(self.dims[0][0])
+        else:
+            self.hilbert_space_dims = tuple(self.dims[0])
 
         self.operator = Operator(self.hilbert_space_dims)
-        dual = qobjevo._dims.is_super
+        dual = qobjevo._dims.issuper
 
         for part in as_list:
             if isinstance(part, Qobj):
@@ -57,9 +69,9 @@ cdef class CuQobjEvo(QobjEvo):
                     "Function based QobjEvo are not supported"
                 )
 
-    def matmul_data(QobjEvo self, object t, Data state, Data out=None):
+    cpdef Data matmul_data(CuQobjEvo self, object t, Data state, Data out=None):
         if not isinstance(state, CuState):
-            state = CuState(state, hilbert_dims=elf.hilbert_space_dims)
+            state = CuState(state, hilbert_dims=self.hilbert_space_dims)
         if not self.action_ready:
             self.operator.prepare_action(
                 settings.cuDensity["ctx"],
@@ -70,12 +82,13 @@ cdef class CuQobjEvo(QobjEvo):
             out = zeros_like_cuState(state)
         self.operator.compute_action(
             t,
-            state=state.base,
-            state_out=out.base,
+            None,
+            state.base,
+            out.base,
         )
         return out
 
-    def expect_data(QobjEvo self, object t, Data state):
+    cpdef object expect_data(CuQobjEvo self, object t, Data state):
         if not isinstance(state, CuState):
             state = CuState(state, hilbert_dims=self.hilbert_space_dims)
         if not self.expect_ready:
@@ -84,10 +97,7 @@ cdef class CuQobjEvo(QobjEvo):
                 state.base
             )
             self.expect_ready = True
-        if out is None:
-            out = zeros_like_cuState(state)
-        self.operator.compute_expectation(t, state=state.base)
-        return out
+        return self.operator.compute_expectation(t, None, state.base)
 
     def arguments(self, args):
         raise NotImplementedError
@@ -132,7 +142,7 @@ cdef class CuQobjEvo(QobjEvo):
 import qutip.core.data as _data
 
 
-@_data.matmul.register(CuOperator, CuState, CuState):
+@_data.matmul.register(CuOperator, CuState, CuState)
 def matmul_cuoperator_custate_custate(left, right, scale=1., out=None):
     if left.shape[1] == right.shape[0]:
         dual = False
@@ -146,7 +156,7 @@ def matmul_cuoperator_custate_custate(left, right, scale=1., out=None):
 
     left._oper.prepare_action(settings.cuDensity["ctx"], right.base)
     if out is None:
-        out = zeros_like_cuState(state)
+        out = zeros_like_cuState(right)
 
     left._oper.compute_action(0, state=right.base, state_out=out.base)
 

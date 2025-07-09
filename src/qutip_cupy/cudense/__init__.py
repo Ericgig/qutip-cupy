@@ -6,13 +6,13 @@ from qutip.core.options import QutipOptions
 from qutip.core import data as _data
 from qutip.settings import settings
 
-from .cudense import cuDensity
-from .state import cuState
+from .cudense import CuOperator
+from .state import CuState
 from ..dense import CuPyDense
 
 
 _data.to.register_group(
-    ['cuDensity'], dense=CuPyDense, sparse=cuDensity, diagonal=cuDensity
+    ['cuDensity'], dense=CuPyDense, sparse=CuOperator, diagonal=CuOperator
 )
 
 
@@ -24,7 +24,8 @@ class cuDensityOption(QutipOptions):
     _properties = {}
 
 
-cuDensityOption._set_as_global_default()
+cuDensityOption_instance = cuDensityOption()
+cuDensityOption_instance._set_as_global_default()
 
 
 class Result(qutip.Result):
@@ -37,8 +38,8 @@ class Result(qutip.Result):
 
 def set_as_default(ctx):
     settings.cuDensity["ctx"] = ctx
-    settings.core["default_dtype"] = "cuDensity"
-    settings.core["default_dtype_scope"] = "full"
+    settings.core["default_dtype"] = CuOperator # "cuDensity"
+    # settings.core["default_dtype_scope"] = "full"
     qutip.SESolver.solver_options['method'] = "CuVern7"
     qutip.MESolver.solver_options['method'] = "CuVern7"
     qutip.MCSolver.solver_options['method'] = "CuVern7"

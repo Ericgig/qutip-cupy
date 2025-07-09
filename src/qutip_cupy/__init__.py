@@ -27,19 +27,10 @@ from . import dia as cdia  # noqa: E402
 from . import dense_functions as cdf  # noqa: E402
 from . import dia_functions as cdiaf  # noqa: E402
 from . import linalg  # noqa: E402
-from .cudense import CuOperator
+#from .cudense import CuOperator
 
 
 __all__ = ["__version__", "CuPyDense"]
-
-
-try:
-    import cudense
-    CuState = cudense.CuState
-    CuOperator = cudense.CuOperator
-    __all__ += ["CuState", "CuOperator"]
-except ImportError:
-    pass
 
 
 CuPyDense = cd.CuPyDense
@@ -186,3 +177,12 @@ data.isherm.add_specialisations([
 # the data layer or qutip_cupy.dense to be accessible from qutip_cupy
 del data
 del cd
+
+try:
+    import cudense
+    CuState = cudense.CuState
+    CuOperator = cudense.CuOperator
+    __all__ += ["CuState", "CuOperator"]
+except ImportError:
+    pass
+

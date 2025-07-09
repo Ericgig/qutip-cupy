@@ -25,45 +25,57 @@ from .utils import *
 class CuState(Data):
     def __init__(self, arg, hilbert_dims=None, shape=None, copy=True):
         if isinstance(arg, (DensePureState, DenseMixedState)):
+            if shape is not None: 
+                pass
+            elif isinstance(arg, DensePureState):
+                shape = (np.prod(arg.hilbert_space_dims), 1)
+            elif isinstance(arg, DenseMixedState):
+                shape = (np.prod(arg.hilbert_space_dims),) * 2
+            if hilbert_dims is None:
+                hilbert_dims = arg.hilbert_space_dims
             base = arg
         elif isinstance(arg, CuPyDense):
+            if shape is None: shape=arg.shape
             if hilbert_dims is None:
-                hilbert_dims = shape[:1]
+                hilbert_dims = arg.shape[:1]
             if arg.shape[0] == arg.shape[1]:
-                # TODO: Add sanity check for hilbert_dims
+                # TODO: Add sanity check for hilbert_dims, MPI support
                 base = DenseMixedState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
-                base.allocate_storage(cp.array(arg.arg, copy=copy).ravel(order="F"))
+                base.attach_storage(cp.array(arg._cp.ravel(order="F"), copy=copy))
             else:
                 base = DensePureState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
-                base.allocate_storage(cp.array(arg.arg, copy=copy).ravel(order="F"))
+                base.attach_storage(cp.array(arg._cp.ravel(order="F"), copy=copy))
         elif isinstance(arg, Dense):
+            if shape is None: shape=arg.shape
             if hilbert_dims is None:
-                hilbert_dims = shape[:1]
+                hilbert_dims = arg.shape[:1]
             if arg.shape[0] == arg.shape[1]:
-                # TODO: Add sanity check for hilbert_dims
+                # TODO: Add sanity check for hilbert_dims, MPI support
                 base = DenseMixedState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
-                base.allocate_storage(cp.array(arg.arg, copy=copy).ravel(order="F"))
+                arr_np = arg.to_array().reshape(hilbert_dims * 2).ravel("F")
+                base.attach_storage( cp.array(arr_np) )
             else:
                 base = DensePureState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
-                base.allocate_storage(cp.array(arg.arg, copy=copy).ravel(order="F"))
+                arr_np = arg.to_array().reshape(hilbert_dims).ravel("F")
+                base.attach_storage( cp.array(arr_np) )
+        else:
+            raise NotImplemetedError()
 
         self.base = base
         self.transform = Transform.DIRECT
-        # TODO: Add sanity check for shape
-        shape = (int(np.prod(base.hilbert_space_dims)), ) * 2
         super().__init__(shape=shape)
 
     def copy(self):
-        return self.base.clone(self.base.storage)
+        return CuState(self.base.clone(cp.array(self.base.storage, copy=True)))
 
     def to_array(self, as_tensor=False):
-        return self.to_cupy(as_tensor)
+        return self.to_cupy(as_tensor).get()
 
     def to_cupy(self, as_tensor=False):
         # TODO: Would this work with mpi?
         tensor = self.base.view()[..., 0]
         if not as_tensor:
-            tensor = tensor.reshape(*self.shape)
+            tensor = tensor.reshape(*self.shape, order="C")
         return tensor
 
     def __neg__(self):
@@ -98,16 +110,19 @@ class CuState(Data):
         return self * (1 / other)
 
     def conj(self):
+        raise NotImplementedError()
         new = self.copy()
         new.transform = conj_transform[new.transform]
         return new
 
     def transpose(self):
+        raise NotImplementedError()
         new = self.copy()
         new.transform = trans_transform[new.transform]
         return new
 
     def adjoint(self):
+        raise NotImplementedError()
         new = self.copy()
         new.transform = adjoint_transform[new.transform]
         return new
@@ -123,23 +138,24 @@ def CuState_from_CuPyDense(mat):
 
 def Dense_from_CuState(mat):
     # TODO: does view work with MPI
-    return _data.Dense(mat.base.view()[..., 0].reshape(mat.shape).get())
+    return _data.Dense(mat.to_array())
 
 
 def CuPyDense_from_CuState(mat):
     # TODO: does view work with MPI
-    return _data.CuPyDense(mat.base.view()[..., 0].reshape(mat.shape))
+    return _data.CuPyDense(mat.to_cupy())
 
 
 _data.to.add_conversions(
     [
         (CuState, _data.Dense, CuState_from_Dense),
-        # (CuOperator, CuPyDense, CuOperator_from_CuDense),
-        (CuState, _data.CuPyDense, CuState_from_CuPyDense),
-        (_data.Dense, CuState, Dense_from_CuOperator),
-        (_data.CuPyDense, CuState, Dense_from_CuOperator),
+        (CuState, CuPyDense, CuState_from_CuPyDense),
+        (_data.Dense, CuState, Dense_from_CuState),
+        (CuPyDense, CuState, CuPyDense_from_CuState),
     ]
 )
+
+_data.to.register_aliases(["CuState"], CuState)
 
 
 @_data.trace.register(CuState)
@@ -152,8 +168,8 @@ def trace_cuState(mat):
 
 @_data.inner.register(CuState, CuState)
 def inner_cuState(left, right, scalar_is_ket=False):
-    inner = left.inner_product(right)
-    if self.shape = (1, 1) and not scalar_is_ket:
+    inner = left.base.inner_product(right.base)
+    if self.shape == (1, 1) and not scalar_is_ket:
         inner = left.storage[0] * right.storage[0]
     else:
         inner = left.inner_product(right)
@@ -170,6 +186,7 @@ def imul_cuState(mat, val):
     return mat.base.inplace_scale(val)
 
 
+@_data.iadd.register(CuState, CuState, CuState)
 def iadd_cuState(left, right, factor=1.):
     left.base.inplace_accumulate(right.base, factor)
     return left
