@@ -128,31 +128,44 @@ class CuOperator(Data):
     terms: list
     hilbert_dims: tuple
 
-    def __init__(self, arg=None, shape=None, copy=True, hilbert_dims=None):
+    def __init__(self, arg=None, mode=(0,), shape=None, copy=True, hilbert_dims=None):
         self.terms = []
         self.hilbert_dims = ()
         self._oper = None
         oper_shape = None
 
         if arg is None:
-            self.hilbert_dims = (-shape[0], )
-            oper_shape = shape
+            if hilbert_dims is None and shape is None:
+                raise ValueError(...)
+            if hilbert_dims is not None:
+                self.hilbert_dims = hilbert_dims
+                N = abs(np.prod(hilbert_dims))
+                oper_shape = (N, N)
+            else
+                self.hilbert_dims = (-shape[0])
+                oper_shape = shape
 
         elif isinstance(arg, MultidiagonalOperator):
             oper_shape = arg.shape
             arg = arg.copy() if copy else arg
             self.terms.append(
-                Term([ProdTerm(arg, (0,), Transform.DIRECT)], 1.+0j)
+                Term([ProdTerm(arg, mode, Transform.DIRECT)], 1.+0j)
             )
-            self.hilbert_dims = (arg.shape[0], )
+            if hilbert_dims is None:
+                self.hilbert_dims = (arg.shape[0], )
+            else:
+                self.hilbert_dims = hilbert_dims
 
         elif isinstance(arg, DenseOperator):
             oper_shape = arg.shape
             arg = arg.copy() if copy else arg
             self.terms.append(
-                Term([ProdTerm(arg, (0,), Transform.DIRECT)], 1.+0j)
+                Term([ProdTerm(arg, mode, Transform.DIRECT)], 1.+0j)
             )
-            self.hilbert_dims = tuple(arg.data.shape[:arg.data.shape // 2])
+            if hilbert_dims is None:
+                self.hilbert_dims = tuple(arg.data.shape[:arg.data.shape // 2])
+            else:
+                self.hilbert_dims = hilbert_dims
 
         elif isinstance(arg, OperatorTerm):
             if hilbert_dims is None:
@@ -164,12 +177,12 @@ class CuOperator(Data):
 
             has_dual = _has_dual(arg)
             N = len(hilbert_dims)
-            for terms, modes, duals, coeff in zip(arg.terms, arg.modes, arg.duals, arg._coefficients):
+            for terms_, modes, duals, coeff in zip(arg.terms, arg.modes, arg.duals, arg._coefficients):
                 if not isinstance(coeff, ScalarCallbackCoefficient):
                     raise ValueError(...)
                 terms = Term([], factor=coeff._static_coeff)
 
-                for term, mode, dual in zip(terms, modes, duals):
+                for term, mode, dual in zip(terms_, modes, duals):
                     term = term.copy() if copy else term
                     if has_dual and not dual:
                         mode = tuple(i + N for i in mode)
@@ -177,6 +190,7 @@ class CuOperator(Data):
                         terms.prod_terms.append(ProdTerm(term, mode, Transform.TRANSPOSE))
                     else:
                         terms.prod_terms.append(ProdTerm(term, mode, Transform.DIRECT))
+                self.terms.append(terms)
 
             if has_dual:
                 self.hilbert_dims = hilbert_dims + hilbert_dims
@@ -185,12 +199,16 @@ class CuOperator(Data):
             hilbert_dims = None
 
         elif isinstance(arg, Data) and not isinstance(arg, CuOperator):
-            oper_shape = arg.shape
             arg = arg.copy() if copy else arg
             self.terms.append(
-                Term([ProdTerm(arg, (0,), Transform.DIRECT)], 1.+0j)
+                Term([ProdTerm(arg, mode, Transform.DIRECT)], 1.+0j)
             )
-            self.hilbert_dims = (-arg.shape[0], )
+            if hilbert_dims is None:
+                self.hilbert_dims = (-arg.shape[0], )
+                oper_shape = arg.shape
+            else:
+                self.hilbert_dims = hilbert_dims
+                oper_shape = (abs(np.prod(hilbert_dims)),) * 2
 
         else:
             raise TypeError(...)
@@ -429,7 +447,7 @@ class CuOperator(Data):
                             (oper, tuple(i - N_hilbert for i in pterm.hilbert))
                         ) * cuterm
                 out += (cuterm * term.factor)
-            
+
         return out
 
 
