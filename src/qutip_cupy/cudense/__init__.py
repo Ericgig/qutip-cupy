@@ -8,6 +8,8 @@ from qutip.settings import settings
 
 from .cudense import CuOperator
 from .state import CuState
+from .ode import *
+from .qobjevo import CuQobjEvo
 from ..dense import CuPyDense
 
 
@@ -31,7 +33,7 @@ cuDensityOption_instance._set_as_global_default()
 class Result(qutip.Result):
     def _e_op_func(self, e_op):
         if isinstance(e_op, (qutip.Qobj, qutip.QobjEvo)):
-            gpu_caller = CuQobjEvo(QobjEvo(e_op))
+            gpu_caller = CuQobjEvo(qutip.QobjEvo(e_op))
             return gpu_caller.expect
         raise NotImplementedError
 

@@ -95,7 +95,7 @@ class Term(NamedTuple):
 
 
 def _has_dual(arg):
-    for duals in zip(self.base.duals):
+    for duals in zip(arg.duals):
         for dual in zip(duals):
             if dual:
                 return True
@@ -141,8 +141,8 @@ class CuOperator(Data):
                 self.hilbert_dims = hilbert_dims
                 N = abs(np.prod(hilbert_dims))
                 oper_shape = (N, N)
-            else
-                self.hilbert_dims = (-shape[0])
+            else:
+                self.hilbert_dims = (-shape[0],)
                 oper_shape = shape
 
         elif isinstance(arg, MultidiagonalOperator):
@@ -152,7 +152,7 @@ class CuOperator(Data):
                 Term([ProdTerm(arg, mode, Transform.DIRECT)], 1.+0j)
             )
             if hilbert_dims is None:
-                self.hilbert_dims = (arg.shape[0], )
+                self.hilbert_dims = (arg.shape[0],)
             else:
                 self.hilbert_dims = hilbert_dims
 
@@ -173,8 +173,6 @@ class CuOperator(Data):
             if hilbert_dims is None:
                 raise ValueError(...)
 
-            oper_shape = (N, N)
-
             has_dual = _has_dual(arg)
             N = len(hilbert_dims)
             for terms_, modes, duals, coeff in zip(arg.terms, arg.modes, arg.duals, arg._coefficients):
@@ -183,7 +181,7 @@ class CuOperator(Data):
                 terms = Term([], factor=coeff._static_coeff)
 
                 for term, mode, dual in zip(terms_, modes, duals):
-                    term = term.copy() if copy else term
+                    # term = term.copy() if copy else term
                     if has_dual and not dual:
                         mode = tuple(i + N for i in mode)
                     if has_dual and dual:
@@ -197,6 +195,8 @@ class CuOperator(Data):
             else:
                 self.hilbert_dims = hilbert_dims
             hilbert_dims = None
+            N = abs(np.prod(self.hilbert_dims))
+            oper_shape = (N, N)
 
         elif isinstance(arg, Data) and not isinstance(arg, CuOperator):
             arg = arg.copy() if copy else arg
@@ -204,7 +204,7 @@ class CuOperator(Data):
                 Term([ProdTerm(arg, mode, Transform.DIRECT)], 1.+0j)
             )
             if hilbert_dims is None:
-                self.hilbert_dims = (-arg.shape[0], )
+                self.hilbert_dims = (-arg.shape[0],)
                 oper_shape = arg.shape
             else:
                 self.hilbert_dims = hilbert_dims
@@ -268,9 +268,9 @@ class CuOperator(Data):
         hilbert = self.hilbert_space_dims
         out = np.zeros(self.shape, dtype=complex)
 
-        for A, term in enumerate(self.terms):
+        for term in self.terms:
             termmat = np.eye(self.shape[0], dtype=complex) * term.factor
-            for B, prod_term in enumerate(term.prod_terms):
+            for prod_term in term.prod_terms:
                 mat = _apply_transformation(prod_term.operator, prod_term.transform)
                 mat = mat.to_array()
 
@@ -293,7 +293,7 @@ class CuOperator(Data):
                 mat = _data.permute.dimensions(
                     _data.Dense(mat),
                     sizes,
-                    list(prod_term.hilbert) + idxs,
+                    np.argsort(list(prod_term.hilbert) + idxs),
                     dtype=_data.Dense,
                 ).to_array()
                 termmat = mat @ termmat
@@ -402,7 +402,7 @@ class CuOperator(Data):
         for term_left, term_right in itertools.product(left.terms, right.terms):
             new.terms.append(
                 Term(
-                    term_left.prod_terms + term_right.prod_terms,
+                    term_right.prod_terms + term_left.prod_terms,
                     term_left.factor * term_right.factor,
                 )
             )
@@ -419,23 +419,23 @@ class CuOperator(Data):
         out = OperatorTerm(dtype="complex128")
         if not dual:
             for term in self.terms:
-                cuterm = 1.
+                cuterm = tensor_product(dtype="complex128")
                 for pterm in term.prod_terms:
                     oper = _apply_transformation(pterm.operator, pterm.transform)
                     oper = _oper_to_ElementaryOperator(oper, pterm.hilbert, self.hilbert_space_dims, copy)
-                    cuterm = tensor_product((oper, pterm.hilbert)) * cuterm
-                out += (cuterm * term.factor)
+                    cuterm = cuterm * tensor_product((oper, pterm.hilbert)) # TODO: ??? Why is this in that order?
+                out = out + (cuterm * term.factor)
         else:
             N_hilbert = len(self.hilbert_dims) // 2
             # TODO: make this tests weak compare?
             assert self.hilbert_dims[:N_hilbert] == self.hilbert_dims[N_hilbert:]
             for term in self.terms:
-                cuterm = 1.
+                cuterm = tensor_product(dtype="complex128")
                 for pterm in term.prod_terms:
                     if all(i < N_hilbert for i in pterm.hilbert):
-                        oper = _apply_transformation(pterm.operator, pterm.transform)
+                        oper = _apply_transformation(pterm.operator, trans_transform[pterm.transform])
                         oper = _oper_to_ElementaryOperator(oper, pterm.hilbert, self.hilbert_space_dims, copy)
-                        cuterm = tensor_product((oper, pterm.hilbert, [True])) * cuterm
+                        cuterm = cuterm * tensor_product((oper, pterm.hilbert, (True,)))
 
                     elif any(i < N_hilbert for i in pterm.hilbert):
                         raise NotImplementedError
@@ -443,10 +443,11 @@ class CuOperator(Data):
                     else:
                         oper = _apply_transformation(pterm.operator, pterm.transform)
                         oper = _oper_to_ElementaryOperator(oper, pterm.hilbert, self.hilbert_space_dims, copy)
-                        cuterm = tensor_product(
+                        cuterm = cuterm * tensor_product(
                             (oper, tuple(i - N_hilbert for i in pterm.hilbert))
-                        ) * cuterm
-                out += (cuterm * term.factor)
+                        )
+
+                out = out + (cuterm * term.factor)
 
         return out
 

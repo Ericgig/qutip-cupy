@@ -17,6 +17,7 @@ except ImportError:
 
 from .state import zeros_like_cuState, CuState
 from .cudense import CuOperator
+from .utils import make_CPUcall
 from qutip.core.cy.qobjevo cimport QobjEvo
 from qutip.core.data cimport Data
 from qutip.settings import settings
@@ -60,7 +61,7 @@ cdef class CuQobjEvo(QobjEvo):
                 isinstance(part, list) and isinstance(part[0], Qobj)
             ):
                 qobj = part[0]
-                coeff = lambda t, _: part[1](t)
+                coeff = make_CPUcall(part[1])
                 self.operator.append(qobj.data.to_OperatorTerm(
                     dual, hilbert_dims=self.hilbert_space_dims
                 ), coeff)

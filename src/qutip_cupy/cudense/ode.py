@@ -4,17 +4,21 @@ from qutip.solver.mesolve import MESolver
 from qutip.solver.sesolve import SESolver
 from qutip.core import data as _data
 
-from .state import cuState
+from .state import CuState
 from .qobjevo import CuQobjEvo
+
+
+__all__ = []
 
 
 class CuIntegratorVern7(IntegratorVern7):
     supports_blackbox: bool = False  # No feedback support
+    method = "vern7"
 
     def __init__(self, system, options):
         self.system = CuQobjEvo(system)
+        super().__init__(self.system, options)
         self.name = f"vern7 with cuDensity"
-        super().__init__(self, self.system, options)
 
     def set_state(self, t, state):
         state = CuState(state, self.system.hilbert_space_dims)
@@ -24,11 +28,12 @@ class CuIntegratorVern7(IntegratorVern7):
 
 class CuIntegratorVern9(IntegratorVern9):
     supports_blackbox: bool = False  # No feedback support
+    method = "vern9"
 
     def __init__(self, system, options):
         self.system = CuQobjEvo(system)
+        super().__init__(self.system, options)
         self.name = f"vern9 with cuDensity"
-        super().__init__(self, self.system, options)
 
     def set_state(self, t, state):
         state = CuState(state, self.system.hilbert_space_dims)

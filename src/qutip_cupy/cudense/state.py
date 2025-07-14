@@ -34,22 +34,24 @@ class CuState(Data):
             if hilbert_dims is None:
                 hilbert_dims = arg.hilbert_space_dims
             base = arg
+
         elif isinstance(arg, CuPyDense):
             if shape is None: shape=arg.shape
             if hilbert_dims is None:
                 hilbert_dims = arg.shape[:1]
-            if arg.shape[0] == arg.shape[1]:
+            if arg.shape[0] != np.prod(hilbert_dims) or arg.shape[1] != 1:
                 # TODO: Add sanity check for hilbert_dims, MPI support
                 base = DenseMixedState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
                 base.attach_storage(cp.array(arg._cp.ravel(order="F"), copy=copy))
             else:
                 base = DensePureState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
                 base.attach_storage(cp.array(arg._cp.ravel(order="F"), copy=copy))
+
         elif isinstance(arg, Dense):
             if shape is None: shape=arg.shape
             if hilbert_dims is None:
                 hilbert_dims = arg.shape[:1]
-            if arg.shape[0] == arg.shape[1]:
+            if arg.shape[0] != np.prod(hilbert_dims) or arg.shape[1] != 1:
                 # TODO: Add sanity check for hilbert_dims, MPI support
                 base = DenseMixedState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
                 arr_np = arg.to_array().reshape(hilbert_dims * 2).ravel("F")
@@ -58,15 +60,19 @@ class CuState(Data):
                 base = DensePureState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
                 arr_np = arg.to_array().reshape(hilbert_dims).ravel("F")
                 base.attach_storage( cp.array(arr_np) )
+
         else:
-            raise NotImplemetedError()
+            raise NotImplementedError(type(arg))
 
         self.base = base
         self.transform = Transform.DIRECT
         super().__init__(shape=shape)
 
     def copy(self):
-        return CuState(self.base.clone(cp.array(self.base.storage, copy=True)))
+        return CuState(
+            self.base.clone(cp.array(self.base.storage, copy=True)),
+            shape=self.shape
+        )
 
     def to_array(self, as_tensor=False):
         return self.to_cupy(as_tensor).get()
@@ -178,12 +184,24 @@ def inner_cuState(left, right, scalar_is_ket=False):
 
 @_data.kron.register(CuState, CuState, CuState)
 def kron_cuState(left, right):
-    ...
+    if type(left.base) != type(right.base):
+        raise TypeError(...)
+    state = type(left.base)(
+        settings.cuDensity["ctx"], 
+        left.base.hilbert_space_dims + right.base.hilbert_space_dims, 
+        1, 
+        "complex128"
+    )
+    # right <--> left reversed since F ordered.
+    kron = cp.kron(right.to_cupy(), left.to_cupy()).ravel(order="F")
+    state.attach_storage(kron.copy())
+    return CuState(state, copy=False)
 
 
 @_data.imul.register(CuState, CuState)
 def imul_cuState(mat, val):
-    return mat.base.inplace_scale(val)
+    mat.base.inplace_scale(val)
+    return mat
 
 
 @_data.iadd.register(CuState, CuState, CuState)
@@ -215,6 +233,23 @@ def one_element_cuState(shape, loc):
 
 def zeros_cuState(shape):
     ...
+
+@_data.reshape.register(CuState, CuState)
+def reshape_stack(matrix):
+    print("reshape cudense skipped")
+    raise NotImplementedError(...)
+    return matrix
+
+
+@_data.column_stack.register(CuState, CuState)
+def column_stack(matrix):
+    print("stack cudense")
+    return CuState(matrix.base, shape=(matrix.shape[0] * matrix.shape[1], 1))
+
+@_data.column_unstack.register(CuState, CuState)
+def column_unstack(matrix, rows):
+    print("unstack cudense")
+    return CuState(matrix.base, shape=(matrix.shape[0] / rows, rows))
 
 
 def zeros_like_cuState(state):

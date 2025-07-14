@@ -1,4 +1,6 @@
 from enum import Enum
+from cuquantum.densitymat import CPUCallback
+
 
 __all__ = [
     "Transform",
@@ -94,3 +96,25 @@ def _compare_hilbert(left, right, return_shifts=False):
         return out_hilbert, shifts_left, shifts_right
     else:
         return out_hilbert
+
+def Oper_to_cupy(oper, ctx):
+    dims = oper.hilbert_space_dims
+    N = np.prod(dims)
+    id_ = DensePureState(ctx, dims, N, "complex128")
+    id_.allocate_storage()
+    id_.storage[::N+1] = 1
+    out = DensePureState(ctx, dims, N, "complex128")
+    out.allocate_storage()
+    
+    oper.prepare_action(ctx, id_)
+    oper.compute_action(0., None, id_, out)
+    return out.view()
+
+def Operterm_to_cupy(term, hdims, ctx):
+    oper = Operator(hdims, (term,))
+    return Oper_to_cupy(oper, ctx)
+
+
+def make_CPUcall(coeff):
+    return CPUCallback(lambda t, _: coeff(t))
+
