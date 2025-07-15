@@ -14,7 +14,7 @@ from ..dense import CuPyDense
 
 
 _data.to.register_group(
-    ['cuDensity'], dense=CuPyDense, sparse=CuOperator, diagonal=CuOperator
+    ['cuDensity'], dense=_data.Dense, sparse=CuOperator, diagonal=CuOperator
 )
 
 
@@ -40,7 +40,7 @@ class Result(qutip.Result):
 
 def set_as_default(ctx):
     settings.cuDensity["ctx"] = ctx
-    settings.core["default_dtype"] = CuOperator # "cuDensity"
+    settings.core["default_dtype"] = "cuDensity"
     # settings.core["default_dtype_scope"] = "full"
     qutip.SESolver.solver_options['method'] = "CuVern7"
     qutip.MESolver.solver_options['method'] = "CuVern7"

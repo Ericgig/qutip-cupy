@@ -1,22 +1,10 @@
-try:
-    import cuquantum.densitymat as cudense
-    MultidiagonalOperator = cudense.MultidiagonalOperator
-    DenseOperator = cudense.DenseOperator
-    OperatorTerm = cudense.OperatorTerm
-    tensor_product = cudense.tensor_product
-    ScalarCallbackCoefficient = cudense._internal.callbacks.ScalarCallbackCoefficient
-
-except ImportError:
-    class _Missing:
-        ...
-
-    cudense = None
-    MultidiagonalOperator = _Missing
-    DenseOperator = _Missing
-    OperatorTerm = _Missing
-    ScalarCallbackCoefficient = _Missing
-    tensor_product = _Missing
-
+from cuquantum.densitymat import (
+    MultidiagonalOperator,
+    DenseOperator,
+    OperatorTerm,
+    tensor_product,
+)
+from cuquantum.densitymat._internal.callbacks import ScalarCallbackCoefficient
 
 from enum import Enum
 from typing import NamedTuple, Any
@@ -28,7 +16,8 @@ from qutip.core import data as _data
 
 from ..dense import CuPyDense
 from .utils import *
-# __all__ = ["CuOperator"]
+
+__all__ = []
 
 
 def _apply_transformation(oper, transform):
@@ -457,6 +446,9 @@ def CuOperator_from_Dia():
 
 
 def CuOperator_from_Dense(mat):
+    if mat.shape[0] != mat.shape[1]:
+        # TODO: This break the function
+        return mat
     return CuOperator(mat)
 
 

@@ -27,6 +27,7 @@ cdef class CuQobjEvo(QobjEvo):
         # bint expect_ready
 
     def __init__(self, qobjevo):
+        qobjevo = qobjevo.to(CuOperator)
         as_list = qobjevo.to_list()
         self._dims = qobjevo._dims
         self.shape = qobjevo.shape
