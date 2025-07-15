@@ -1,20 +1,7 @@
 #cython: language_level=3
-# distutils: language = c++
-# distutils: include_dirs = [/home/ericgig/cuQuantum_env/lib/python3.12/site-packages/numpy/_core/include, /home/ericgig/qutip/qutip/core/data/]
 
-
-try:
-    import cuquantum.densitymat as cudense
-    Operator = cudense.Operator
-
-except ImportError:
-    class _Missing:
-        ...
-
-    cudense = None
-    Operator = _Missing
-
-
+import cuquantum.densitymat as cudense
+from cuquantum.densitymat import Operator
 from .state import zeros_like_cuState, CuState
 from .cudense import CuOperator
 from .utils import make_CPUcall
@@ -22,6 +9,7 @@ from qutip.core.cy.qobjevo cimport QobjEvo
 from qutip.core.data cimport Data
 from qutip.settings import settings
 from qutip import Qobj
+
 
 # TODO: Being child class of QobjEvo needed? Or duck typing good enough?
 cdef class CuQobjEvo(QobjEvo):

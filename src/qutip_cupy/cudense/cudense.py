@@ -58,7 +58,7 @@ def _apply_transformation(oper, transform):
 
 def _oper_to_ElementaryOperator(oper, hilbert_idx, hilbert_dims, copy=False):
     N = len(hilbert_idx)
-    shape = (hilbert_dims[idx] for idx in hilbert_idx)
+    shape = tuple(hilbert_dims[idx] for idx in hilbert_idx)
     if isinstance(oper, (DenseOperator, MultidiagonalOperator)):
         if N != 1 and isinstance(oper, MultidiagonalOperator):
             raise ValueError("MultidiagonalOperator on multiple hilbert spaces")
@@ -76,7 +76,7 @@ def _oper_to_ElementaryOperator(oper, hilbert_idx, hilbert_dims, copy=False):
             data[:end, i] = dia_matrix.diagonal(offset)
         out = MultidiagonalOperator(data, offsets)
     else:
-        out = DenseOperator(mat.to_array().reshape(shape + shape))
+        out = DenseOperator(oper.to_array().reshape(shape + shape))
     return out
 
 
@@ -474,7 +474,7 @@ _data.to.add_conversions(
         (CuOperator, _data.Dense, CuOperator_from_Dense),
         (CuOperator, CuPyDense, CuOperator_from_CuDense),
         (CuOperator, _data.Dia, CuOperator_from_Dia),
-        (_data.Dense, CuOperator, Dense_from_CuOperator, 1e10),
+        (_data.Dense, CuOperator, Dense_from_CuOperator, 10),
     ]
 )
 _data.to.register_aliases(["densitymat_OperatorTerm", "CuOperator"], CuOperator)
@@ -551,6 +551,11 @@ def dimensions_CuOperator(matrix, hilbert, order):
     return new
 
 
+def isequal_CuOperator(left, right):
+    # TODO: Implement real one
+    return left is right
+
+
 ###############################################################################
 ###############################################################################
 
@@ -614,3 +619,13 @@ _data.permute.dimensions.add_specialisations([
 _data.extract.add_specialisations([
     (CuOperator, extract_CuOperator),
 ])
+
+_data.isequal.add_specialisations([
+    (CuOperator, CuOperator, isequal_CuOperator),
+])
+
+
+
+
+
+

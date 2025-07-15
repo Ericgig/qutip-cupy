@@ -47,7 +47,8 @@ class CuState(Data):
                 base = DensePureState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
                 base.attach_storage(cp.array(arg._cp.ravel(order="F"), copy=copy))
 
-        elif isinstance(arg, Dense):
+        elif isinstance(arg, Data):
+            arg = _data.to(_data.Dense, arg)
             if shape is None: shape=arg.shape
             if hilbert_dims is None:
                 hilbert_dims = arg.shape[:1]
@@ -236,19 +237,16 @@ def zeros_cuState(shape):
 
 @_data.reshape.register(CuState, CuState)
 def reshape_stack(matrix):
-    print("reshape cudense skipped")
     raise NotImplementedError(...)
     return matrix
 
 
 @_data.column_stack.register(CuState, CuState)
 def column_stack(matrix):
-    print("stack cudense")
     return CuState(matrix.base, shape=(matrix.shape[0] * matrix.shape[1], 1))
 
 @_data.column_unstack.register(CuState, CuState)
 def column_unstack(matrix, rows):
-    print("unstack cudense")
     return CuState(matrix.base, shape=(matrix.shape[0] / rows, rows))
 
 

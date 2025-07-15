@@ -24,6 +24,6 @@ develop-eggs
 lib
 lib64
 
-
+.ipynb_checkpoints/
 src/qutip_cupy/.ipynb_checkpoints/
 src/qutip_cupy/cudense/.ipynb_checkpoints/

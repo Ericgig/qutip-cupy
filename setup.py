@@ -7,6 +7,9 @@ import sys
 # Required third-party imports, must be specified in pyproject.toml.
 import packaging.version
 import setuptools
+from Cython.Build import cythonize
+import qutip
+import numpy
 
 
 def process_options():
@@ -86,9 +89,36 @@ def create_version_py_file(options):
         print(content, file=file)
 
 
+
+def get_ext_modules(options):
+    pyx_file = os.path.join("src", "qutip_cupy", "cudense", "qobjevo.pyx")
+    include_dirs = [
+        numpy.get_include(),
+        os.path.abspath(os.path.join(qutip.core.data.__file__, os.pardir))
+    ]
+    print("*********************************************************************************")
+    print(include_dirs)
+    print(pyx_file)
+    print("*********************************************************************************")
+    ext = setuptools.Extension(
+        name="qutip_cupy.cudense.qobjevo",
+        sources=[pyx_file],
+        include_dirs=include_dirs,
+        language="c++",
+    )
+    
+    return cythonize(ext)
+    
+
+
+
 if __name__ == "__main__":
     options = process_options()
     create_version_py_file(options)
     # Most of the kwargs to setup are defined in setup.cfg; the only ones we
     # keep here are ones that we have done some compile-time processing on.
-    setuptools.setup(version=options["version"],)
+    
+    setuptools.setup(
+        version=options["version"],
+        ext_modules = get_ext_modules(options),
+    )
