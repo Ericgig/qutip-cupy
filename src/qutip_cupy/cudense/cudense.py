@@ -3,6 +3,8 @@ from cuquantum.densitymat import (
     DenseOperator,
     OperatorTerm,
     tensor_product,
+    CPUCallback,
+    GPUCallback,
 )
 from cuquantum.densitymat._internal.callbacks import ScalarCallbackCoefficient
 
@@ -10,6 +12,7 @@ from enum import Enum
 from typing import NamedTuple, Any
 import itertools
 import numpy as np
+import cupy as cp
 
 from qutip.core.data import Data
 from qutip.core import data as _data
@@ -20,43 +23,93 @@ from .utils import *
 __all__ = []
 
 
-def _apply_transformation(oper, transform):
-    if transform == Transform.DIRECT:
-        out = oper
-    if transform == Transform.CONJ:
-        if isinstance(oper, _data.Data):
-            out = oper.conj()
-        elif isinstance(oper, DenseOperator):
-            out = DenseOperator(oper.to_array().conj())
-        elif isinstance(oper, MultidiagonalOperator):
-            out = MultidiagonalOperator(oper.data.conj(), oper.offsets)
-    if transform == Transform.TRANSPOSE:
-        if isinstance(oper, _data.Data):
-            out = oper.transpose()
-        elif isinstance(oper, DenseOperator):
-            out = DenseOperator(oper.data.T)
-        elif isinstance(oper, MultidiagonalOperator):
-            out = MultidiagonalOperator(oper.data, [-i for i in oper.offsets])
-    if transform == Transform.ADJOINT:
-        if isinstance(oper, _data.Data):
-            out = oper.adjoint()
-        elif isinstance(oper, (DenseOperator, MultidiagonalOperator)):
-            out = oper.dag()
+def _transpose_cu_operator(mat):
+    if isinstance(oper, MultidiagonalOperator):
+        out = MultidiagonalOperator(
+            oper.data,
+            [-offset for offset in oper.offsets],
+            callback=oper.callback,
+        )
+    elif isinstance(oper, DenseOperator):
+        N = oper.num_modes
+        perm = tuple(range(N, 2*N)) + tuple(range(N))
+        new_callback = None
+        
+        if oper.callback is not None:
+            @oper.callback.__class__
+            def new_callback(t, _):
+                # TODO: copy needed?
+                return oper.callback.transpose(perm).copy(order="F")                
+            
+        out = DenseOperator(
+            oper.data.transpose(perm).copy(order="F"),
+            callback=new_callback
+        )
+    else:
+        raise NotImplementedError
+
     return out
 
 
-def _oper_to_ElementaryOperator(oper, hilbert_idx, hilbert_dims, copy=False):
+def _to_array(oper, transform):
+    if isinstance(oper, _data.Data):
+        arr = oper.to_array()
+        
+    elif isinstance(oper, DenseOperator):
+        N = np.prod(oper.mode_dims)
+        arr = oper.data[..., 0].reshape((N, N))
+        if isinstance(arr, cp.ndarray): arr = arr.get()
+            
+    elif isinstance(oper, MultidiagonalOperator):
+        arr = sum(
+            np.diag(diag[:abs(offset) or None], offset) 
+            for diag, offset 
+            in zip(oper.data[:, :, 0].T, oper.offsets)
+        )
+    else:
+        raise NotImplementedError
+
+    if transform == Transform.DIRECT:
+        out = arr
+    elif transform == Transform.CONJ:
+        out = arr.conj()
+    elif transform == Transform.TRANSPOSE:
+        out = arr.transpose()
+    elif transform == Transform.ADJOINT:
+        out = arr.transpose().conj()
+
+    return out
+
+
+def _oper_to_ElementaryOperator(oper, hilbert_idx, hilbert_dims, transform, copy=False):
     N = len(hilbert_idx)
     shape = tuple(hilbert_dims[idx] for idx in hilbert_idx)
+
     if isinstance(oper, (DenseOperator, MultidiagonalOperator)):
         if N != 1 and isinstance(oper, MultidiagonalOperator):
             raise ValueError("MultidiagonalOperator on multiple hilbert spaces")
-        if N == 1 and oper.shape[0] != shape[0]:
-            raise ValueError("Operator shape does not match hilbert spaces")
         if list(oper.shape[:-1]) != list(shape + shape):
             raise ValueError("Operator shape does not match hilbert spaces")
-        out = oper
+        
+        if transform == Transform.DIRECT:
+            out = oper
+        elif transform == Transform.ADJOINT:
+            out = oper.dag()
+        elif transform == Transform.CONJ:
+            out = _transpose_cu_operator(oper).dag()
+        elif transform == Transform.TRANSPOSE:
+            out = _transpose_cu_operator(oper)
+        
     elif isinstance(oper, _data.Dia) and N == 1:
+        if transform == Transform.DIRECT:
+            pass
+        elif transform == Transform.ADJOINT:
+            oper = oper.adjoint()
+        elif transform == Transform.CONJ:
+            oper = oper.conj()
+        elif transform == Transform.TRANSPOSE:
+            oper = oper.transpose()
+            
         dia_matrix = oper.as_scipy()
         offsets = list(dia_matrix.offsets)
         data = np.zeros((dia_matrix.shape[0], len(offsets)), dtype=complex)
@@ -64,8 +117,18 @@ def _oper_to_ElementaryOperator(oper, hilbert_idx, hilbert_dims, copy=False):
             end = None if offset == 0 else -abs(offset)
             data[:end, i] = dia_matrix.diagonal(offset)
         out = MultidiagonalOperator(data, offsets)
+        
     else:
+        if transform == Transform.DIRECT:
+            pass
+        elif transform == Transform.ADJOINT:
+            oper = oper.adjoint()
+        elif transform == Transform.CONJ:
+            oper = oper.conj()
+        elif transform == Transform.TRANSPOSE:
+            oper = oper.transpose()
         out = DenseOperator(oper.to_array().reshape(shape + shape))
+    
     return out
 
 
@@ -136,24 +199,26 @@ class CuOperator(Data):
 
         elif isinstance(arg, MultidiagonalOperator):
             oper_shape = arg.shape
-            arg = arg.copy() if copy else arg
+            # arg = arg.copy() if copy else arg
             self.terms.append(
                 Term([ProdTerm(arg, mode, Transform.DIRECT)], 1.+0j)
             )
             if hilbert_dims is None:
                 self.hilbert_dims = (arg.shape[0],)
             else:
+                # TODO: raise error if not matching?
                 self.hilbert_dims = hilbert_dims
 
         elif isinstance(arg, DenseOperator):
-            oper_shape = arg.shape
-            arg = arg.copy() if copy else arg
+            oper_shape = np.prod(arg.mode_dims), np.prod(arg.mode_dims)
+            # arg = arg.copy() if copy else arg
             self.terms.append(
                 Term([ProdTerm(arg, mode, Transform.DIRECT)], 1.+0j)
             )
             if hilbert_dims is None:
-                self.hilbert_dims = tuple(arg.data.shape[:arg.data.shape // 2])
+                self.hilbert_dims = arg.mode_dims
             else:
+                # TODO: raise error if not matching?
                 self.hilbert_dims = hilbert_dims
 
         elif isinstance(arg, OperatorTerm):
@@ -260,8 +325,7 @@ class CuOperator(Data):
         for term in self.terms:
             termmat = np.eye(self.shape[0], dtype=complex) * term.factor
             for prod_term in term.prod_terms:
-                mat = _apply_transformation(prod_term.operator, prod_term.transform)
-                mat = mat.to_array()
+                mat = _to_array(prod_term.operator, prod_term.transform)
 
                 try:
                     # if cupy array, get numpy
@@ -405,15 +469,16 @@ class CuOperator(Data):
             if dual:
                 hilbert_dims = hilbert_dims + hilbert_dims
             self._update_hilbert(hilbert_dims)
+            
         out = OperatorTerm(dtype="complex128")
         if not dual:
             for term in self.terms:
                 cuterm = tensor_product(dtype="complex128")
                 for pterm in term.prod_terms:
-                    oper = _apply_transformation(pterm.operator, pterm.transform)
-                    oper = _oper_to_ElementaryOperator(oper, pterm.hilbert, self.hilbert_space_dims, copy)
+                    oper = _oper_to_ElementaryOperator(pterm.operator, pterm.hilbert, self.hilbert_space_dims, pterm.transform, copy)
                     cuterm = cuterm * tensor_product((oper, pterm.hilbert)) # TODO: ??? Why is this in that order?
                 out = out + (cuterm * term.factor)
+                
         else:
             N_hilbert = len(self.hilbert_dims) // 2
             # TODO: make this tests weak compare?
@@ -422,16 +487,14 @@ class CuOperator(Data):
                 cuterm = tensor_product(dtype="complex128")
                 for pterm in term.prod_terms:
                     if all(i < N_hilbert for i in pterm.hilbert):
-                        oper = _apply_transformation(pterm.operator, trans_transform[pterm.transform])
-                        oper = _oper_to_ElementaryOperator(oper, pterm.hilbert, self.hilbert_space_dims, copy)
+                        oper = _oper_to_ElementaryOperator(pterm.operator, pterm.hilbert, self.hilbert_space_dims, trans_transform[pterm.transform], copy)
                         cuterm = cuterm * tensor_product((oper, pterm.hilbert, (True,)))
 
                     elif any(i < N_hilbert for i in pterm.hilbert):
                         raise NotImplementedError
 
                     else:
-                        oper = _apply_transformation(pterm.operator, pterm.transform)
-                        oper = _oper_to_ElementaryOperator(oper, pterm.hilbert, self.hilbert_space_dims, copy)
+                        oper = _oper_to_ElementaryOperator(pterm.operator, pterm.hilbert, self.hilbert_space_dims, pterm.transform, copy)
                         cuterm = cuterm * tensor_product(
                             (oper, tuple(i - N_hilbert for i in pterm.hilbert))
                         )

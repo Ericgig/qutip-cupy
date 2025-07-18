@@ -2,13 +2,15 @@
 
 import cuquantum.densitymat as cudense
 from cuquantum.densitymat import Operator
-from .state import zeros_like_cuState, CuState
-from .cudense import CuOperator
-from .utils import make_CPUcall
+
 from qutip.core.cy.qobjevo cimport QobjEvo
 from qutip.core.data cimport Data
 from qutip.settings import settings
 from qutip import Qobj
+
+from .state import zeros_like_cuState, CuState
+from .cudense import CuOperator
+from .utils import wrap_coeff, wrap_funcelement
 
 
 # TODO: Being child class of QobjEvo needed? Or duck typing good enough?
@@ -50,14 +52,16 @@ cdef class CuQobjEvo(QobjEvo):
                 isinstance(part, list) and isinstance(part[0], Qobj)
             ):
                 qobj = part[0]
-                coeff = make_CPUcall(part[1])
+                coeff = wrap_coeff(part[1])
                 self.operator.append(qobj.data.to_OperatorTerm(
                     dual, hilbert_dims=self.hilbert_space_dims
                 ), coeff)
             else:
-                raise NotImplementedError(
-                    "Function based QobjEvo are not supported"
-                )
+                oper = wrap_funcelement(*part)
+                self.operator.append(qobj.data.to_OperatorTerm(
+                    dual, hilbert_dims=self.hilbert_space_dims
+                ))
+                
 
     cpdef Data matmul_data(CuQobjEvo self, object t, Data state, Data out=None):
         if not isinstance(state, CuState):

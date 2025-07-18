@@ -1,6 +1,7 @@
 from enum import Enum
-from cuquantum.densitymat import CPUCallback
-
+from cuquantum.densitymat import CPUCallback, DenseOperator
+from qutip.core.cy._element import _BaseElement, _FuncElement
+from qutip.core.data import Dia
 
 __all__ = [
     "Transform",
@@ -110,11 +111,37 @@ def Oper_to_cupy(oper, ctx):
     oper.compute_action(0., None, id_, out)
     return out.view()
 
+
 def Operterm_to_cupy(term, hdims, ctx):
     oper = Operator(hdims, (term,))
     return Oper_to_cupy(oper, ctx)
 
 
-def make_CPUcall(coeff):
+def wrap_coeff(coeff):
     return CPUCallback(lambda t, _: coeff(t))
 
+
+def wrap_funcelement(element, args):
+    if not isinstance(element, _BaseElement):
+        element = _FuncElement(element, args)
+    sample = element.qobj(0)
+    if sample.dtype is Dia:
+    
+        def func(t, _=None):
+            # TODO: Should we make this a class for pickling?
+            arr = element.qobj(t).full()
+            arr = arr.reshape(*shape)
+            return arr.transpose(*perm)
+
+    else:
+        shape = sample._dims._get_tensor_shape()
+        perm = sample._dims._get_tensor_perm()
+    
+        def func(t, _=None):
+            # TODO: Should we make this a class for pickling?
+            arr = element.qobj(t).full()
+            arr = arr.reshape(*shape)
+            return arr.transpose(*perm)
+
+
+    return DenseOperator(func(0), CPUCallback(func))
