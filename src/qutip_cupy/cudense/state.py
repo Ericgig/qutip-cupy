@@ -199,6 +199,18 @@ def kron_cuState(left, right):
     return CuState(state, copy=False)
 
 
+@_data.mul.register(CuState, CuState)
+def mul_cuState(mat, val):
+    return mat * val
+
+
+@_data.add.register(CuState, CuState, CuState)
+def add_cuState(left, right, scale=1.):
+    out = left.copy()
+    out.base.inplace_accumulate(right.base, factor)
+    return out
+
+
 @_data.imul.register(CuState, CuState)
 def imul_cuState(mat, val):
     mat.base.inplace_scale(val)

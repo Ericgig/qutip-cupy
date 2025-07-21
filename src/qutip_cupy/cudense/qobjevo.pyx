@@ -61,7 +61,7 @@ cdef class CuQobjEvo(QobjEvo):
                 self.operator.append(qobj.data.to_OperatorTerm(
                     dual, hilbert_dims=self.hilbert_space_dims
                 ))
-                
+
 
     cpdef Data matmul_data(CuQobjEvo self, object t, Data state, Data out=None):
         if not isinstance(state, CuState):

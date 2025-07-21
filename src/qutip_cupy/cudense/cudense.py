@@ -39,7 +39,7 @@ def _transpose_cu_operator(mat):
             @oper.callback.__class__
             def new_callback(t, _):
                 # TODO: copy needed?
-                return oper.callback.transpose(perm).copy(order="F")                
+                return oper.callback.Callback(t, _).transpose(perm).copy(order="F")                
             
         out = DenseOperator(
             oper.data.transpose(perm).copy(order="F"),
@@ -82,14 +82,15 @@ def _to_array(oper, transform):
 
 
 def _oper_to_ElementaryOperator(oper, hilbert_idx, hilbert_dims, transform, copy=False):
+    print(hilbert_idx, hilbert_dims, transform)
     N = len(hilbert_idx)
     shape = tuple(hilbert_dims[idx] for idx in hilbert_idx)
 
     if isinstance(oper, (DenseOperator, MultidiagonalOperator)):
         if N != 1 and isinstance(oper, MultidiagonalOperator):
             raise ValueError("MultidiagonalOperator on multiple hilbert spaces")
-        if list(oper.shape[:-1]) != list(shape + shape):
-            raise ValueError("Operator shape does not match hilbert spaces")
+        if list(oper.shape[:len(oper.shape) // 2]) != list(shape):
+            raise ValueError(f"Operator shape does not match hilbert spaces: {list(oper.shape[:len(oper.shape) // 2])}, {shape}")
         
         if transform == Transform.DIRECT:
             out = oper
@@ -180,7 +181,7 @@ class CuOperator(Data):
     terms: list
     hilbert_dims: tuple
 
-    def __init__(self, arg=None, mode=(0,), shape=None, copy=True, hilbert_dims=None):
+    def __init__(self, arg=None, mode=None, shape=None, copy=True, hilbert_dims=None):
         self.terms = []
         self.hilbert_dims = ()
         self._oper = None
@@ -201,7 +202,7 @@ class CuOperator(Data):
             oper_shape = arg.shape
             # arg = arg.copy() if copy else arg
             self.terms.append(
-                Term([ProdTerm(arg, mode, Transform.DIRECT)], 1.+0j)
+                Term([ProdTerm(arg, mode or (0,), Transform.DIRECT)], 1.+0j)
             )
             if hilbert_dims is None:
                 self.hilbert_dims = (arg.shape[0],)
@@ -211,6 +212,8 @@ class CuOperator(Data):
 
         elif isinstance(arg, DenseOperator):
             oper_shape = np.prod(arg.mode_dims), np.prod(arg.mode_dims)
+            if mode is None:
+                mode = tuple(i for i in range(arg.num_modes))
             # arg = arg.copy() if copy else arg
             self.terms.append(
                 Term([ProdTerm(arg, mode, Transform.DIRECT)], 1.+0j)
@@ -255,7 +258,7 @@ class CuOperator(Data):
         elif isinstance(arg, Data) and not isinstance(arg, CuOperator):
             arg = arg.copy() if copy else arg
             self.terms.append(
-                Term([ProdTerm(arg, mode, Transform.DIRECT)], 1.+0j)
+                Term([ProdTerm(arg, mode or (0,), Transform.DIRECT)], 1.+0j)
             )
             if hilbert_dims is None:
                 self.hilbert_dims = (-arg.shape[0],)
@@ -265,7 +268,7 @@ class CuOperator(Data):
                 oper_shape = (abs(np.prod(hilbert_dims)),) * 2
 
         else:
-            raise TypeError(...)
+            raise TypeError(f"{type(arg)} not supported.")
 
         if shape and shape != oper_shape:
             raise ValueError(...)
@@ -282,7 +285,7 @@ class CuOperator(Data):
     def _update_hilbert(self, new):
         matched = _compare_hilbert(self.hilbert_dims, new, return_shifts=True)
         if not matched:
-            raise ValueError(...)
+            raise ValueError(f"{self.hilbert_dims} updated to {new}")
 
         new_hilbert, shifts, _ = matched
         self.hilbert_dims = tuple(new_hilbert)
@@ -307,11 +310,18 @@ class CuOperator(Data):
 
     def copy(self, shallow=False):
         new = CuOperator(shape=self.shape, hilbert_dims=self.hilbert_dims)
+        
         for term in self.terms:
             copy_term = Term([], factor=term.factor)
+
             for pterm in term.prod_terms:
+                if isinstance(pterm.operator, _data.Data) and not shallow:
+                    # DenseOperator do not have a copy method...
+                    oper = pterm.operator.copy()
+                else:
+                    oper = pterm.operator
                 copy_term.prod_terms.append(ProdTerm(
-                    pterm.operator.copy() if not shallow else pterm.operator,
+                    oper,
                     pterm.hilbert,
                     pterm.transform,
                 ))

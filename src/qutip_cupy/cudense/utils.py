@@ -121,17 +121,31 @@ def wrap_coeff(coeff):
     return CPUCallback(lambda t, _: coeff(t))
 
 
+
+
+
+
 def wrap_funcelement(element, args):
     if not isinstance(element, _BaseElement):
         element = _FuncElement(element, args)
     sample = element.qobj(0)
     if sample.dtype is Dia:
-    
+        dia_matrix = sample.as_scipy()
+        offsets = list(dia_matrix.offsets)
+
         def func(t, _=None):
             # TODO: Should we make this a class for pickling?
-            arr = element.qobj(t).full()
-            arr = arr.reshape(*shape)
-            return arr.transpose(*perm)
+            dia_matrix = element.qobj(t).as_scipy()
+            arr_shape = (dia_matrix.shape[0], len(offsets))
+            data = np.zeros(arr_shape, dtype=complex)
+
+            for i, offset in enumerate(offsets):
+                end = None if offset == 0 else -abs(offset)
+                data[:end, i] = dia_matrix.diagonal(offset)
+
+            return data
+
+        out = MultidiagonalOperator(func(0), offsets, callback=func)
 
     else:
         shape = sample._dims._get_tensor_shape()
@@ -143,5 +157,7 @@ def wrap_funcelement(element, args):
             arr = arr.reshape(*shape)
             return arr.transpose(*perm)
 
+        out = DenseOperator(func(0), CPUCallback(func))
 
-    return DenseOperator(func(0), CPUCallback(func))
+
+    return out
