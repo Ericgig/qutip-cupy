@@ -82,7 +82,7 @@ def _to_array(oper, transform):
 
 
 def _oper_to_ElementaryOperator(oper, hilbert_idx, hilbert_dims, transform, copy=False):
-    print(hilbert_idx, hilbert_dims, transform)
+
     N = len(hilbert_idx)
     shape = tuple(hilbert_dims[idx] for idx in hilbert_idx)
 
