@@ -57,7 +57,7 @@ cdef class CuQobjEvo(QobjEvo):
                     dual, hilbert_dims=self.hilbert_space_dims
                 ), coeff)
             else:
-                oper = wrap_funcelement(*part)
+                oper = wrap_funcelement(*part, dual, self.hilbert_space_dims)
                 self.operator.append(qobj.data.to_OperatorTerm(
                     dual, hilbert_dims=self.hilbert_space_dims
                 ))
