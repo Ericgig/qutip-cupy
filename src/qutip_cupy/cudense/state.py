@@ -110,6 +110,8 @@ class CuState(Data):
 
     def to_cupy(self, as_tensor=False):
         # TODO: Would this work with mpi?
+        if self.base.local_info[0][::-1] != self.base.hilbert_space_dims:
+            raise NotImplementedError("Not Implemented for MPI distributed array.")
         tensor = self.base.view()[..., 0]
         if not as_tensor:
             tensor = tensor.reshape(*self.shape, order="C")
