@@ -39,28 +39,58 @@ class CuState(Data):
             if shape is None: shape=arg.shape
             if hilbert_dims is None:
                 hilbert_dims = arg.shape[:1]
+
+
+            
             if arg.shape[0] != np.prod(hilbert_dims) or arg.shape[1] != 1:
-                # TODO: Add sanity check for hilbert_dims, MPI support
+                # TODO: Add sanity check for hilbert_dims
                 base = DenseMixedState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
-                base.attach_storage(cp.array(arg._cp.ravel(order="F"), copy=copy))
+                sizes, offsets = base.local_info
+                sls = tuple(slice(s, s+n) for s, n in zip(offsets, sizes))[:1]
+                N = np.prod(sizes)
+                if len(arg._cp) == N:
+                    base.attach_storage(cp.array(arg._cp.reshape(hilbert_dims * 2)[sls].ravel(order="F"), copy=copy))
+                else:
+                    base.allocate_storage()
+                    base.storage[:N] = arg._cp.reshape(hilbert_dims * 2)[sls].ravel(order="F")
+                    
             else:
                 base = DensePureState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
-                base.attach_storage(cp.array(arg._cp.ravel(order="F"), copy=copy))
+                sizes, offsets = base.local_info
+                sls = tuple(slice(s, s+n) for s, n in zip(offsets, sizes))[:1]
+                N = np.prod(sizes)
+                if len(arg._cp) == N:
+                    base.attach_storage(cp.array(arg._cp.reshape(hilbert_dims)[sls].ravel(order="F"), copy=copy))
+                else:
+                    base.allocate_storage()
+                    base.storage[:N] = arg._cp.reshape(hilbert_dims)[sls].ravel(order="F")
 
         elif isinstance(arg, Data):
             arg = _data.to(_data.Dense, arg)
             if shape is None: shape=arg.shape
             if hilbert_dims is None:
                 hilbert_dims = arg.shape[:1]
+
             if arg.shape[0] != np.prod(hilbert_dims) or arg.shape[1] != 1:
-                # TODO: Add sanity check for hilbert_dims, MPI support
+                # TODO: Add sanity check for hilbert_dims
                 base = DenseMixedState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
-                arr_np = arg.to_array().reshape(hilbert_dims * 2).ravel("F")
-                base.attach_storage( cp.array(arr_np) )
+                sizes, offsets = base.local_info
+                sls = tuple(slice(s, s+n) for s, n in zip(offsets, sizes))[:-1]
+                N = np.prod(sizes)
+                print(base.local_info)
+                print(sls)
+                print(base.storage_size, np.prod(sizes))
+                arr_np = arg.to_array().reshape(hilbert_dims * 2)[sls].ravel("F")
+                base.allocate_storage()
+                base.storage[:N] = cp.array(arr_np)
             else:
                 base = DensePureState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
-                arr_np = arg.to_array().reshape(hilbert_dims).ravel("F")
-                base.attach_storage( cp.array(arr_np) )
+                sizes, offsets = base.local_info
+                sls = tuple(slice(s, s+n) for s, n in zip(offsets, sizes))[:1]
+                N = np.prod(sizes)
+                arr_np = arg.to_array().reshape(hilbert_dims)[sls].ravel("F")
+                base.allocate_storage()
+                base.storage[:N] = cp.array(arr_np)
 
         else:
             raise NotImplementedError(type(arg))

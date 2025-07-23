@@ -107,7 +107,7 @@ def _compare_hilbert(left, right, return_shifts=False):
 def Oper_to_cupy(oper, ctx):
     dims = oper.hilbert_space_dims
     N = np.prod(dims)
-    id_ = DensePureState(ctx, dims, N, "complex128")_coe
+    id_ = DensePureState(ctx, dims, N, "complex128")
     id_.allocate_storage()
     id_.storage[::N+1] = 1
     out = DensePureState(ctx, dims, N, "complex128")
@@ -129,9 +129,9 @@ def wrap_coeff(coeff):
 
 def _wrap_callable(func):
     sample = func(0)
-        shape = sample._dims._get_tensor_shape()
-        perm = sample._dims._get_tensor_perm()
-        num_mode = len(shape) // 2
+    shape = sample._dims._get_tensor_shape()
+    perm = sample._dims._get_tensor_perm()
+    num_mode = len(shape) // 2
     
     if sample.dtype is Dia and num_mode == 1:
         dia_matrix = sample.as_scipy()
