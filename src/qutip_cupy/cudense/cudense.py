@@ -366,10 +366,10 @@ class CuOperator(Data):
     def conj(self):
         new = CuOperator(shape=self.shape, hilbert_dims=self.hilbert_dims)
         for term in self.terms:
-            copy_term = Term([], factor=term.factor)
+            copy_term = Term([], factor=term.factor.conjugate())
             for pterm in term.prod_terms:
                 copy_term.prod_terms.append(ProdTerm(
-                    pterm.operator.copy(),
+                    pterm.operator,
                     pterm.hilbert,
                     conj_transform[pterm.transform],
                 ))
@@ -382,7 +382,7 @@ class CuOperator(Data):
             copy_term = Term([], factor=term.factor)
             for pterm in term.prod_terms[::-1]:
                 copy_term.prod_terms.append(ProdTerm(
-                    pterm.operator.copy(),
+                    pterm.operator,
                     pterm.hilbert,
                     trans_transform[pterm.transform],
                 ))
@@ -392,10 +392,10 @@ class CuOperator(Data):
     def adjoint(self):
         new = CuOperator(shape=self.shape, hilbert_dims=self.hilbert_dims)
         for term in self.terms:
-            copy_term = Term([], factor=term.factor)
+            copy_term = Term([], factor=term.factor.conjugate())
             for pterm in term.prod_terms[::-1]:
                 copy_term.prod_terms.append(ProdTerm(
-                    pterm.operator.copy(),
+                    pterm.operator,
                     pterm.hilbert,
                     adjoint_transform[pterm.transform],
                 ))

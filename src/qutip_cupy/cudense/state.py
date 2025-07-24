@@ -40,8 +40,6 @@ class CuState(Data):
             if hilbert_dims is None:
                 hilbert_dims = arg.shape[:1]
 
-
-            
             if arg.shape[0] != np.prod(hilbert_dims) or arg.shape[1] != 1:
                 # TODO: Add sanity check for hilbert_dims
                 base = DenseMixedState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
@@ -67,6 +65,7 @@ class CuState(Data):
 
         elif isinstance(arg, Data):
             arg = _data.to(_data.Dense, arg)
+            # TODO: CSR / Dia
             if shape is None: shape=arg.shape
             if hilbert_dims is None:
                 hilbert_dims = arg.shape[:1]
@@ -77,12 +76,10 @@ class CuState(Data):
                 sizes, offsets = base.local_info
                 sls = tuple(slice(s, s+n) for s, n in zip(offsets, sizes))[:-1]
                 N = np.prod(sizes)
-                print(base.local_info)
-                print(sls)
-                print(base.storage_size, np.prod(sizes))
                 arr_np = arg.to_array().reshape(hilbert_dims * 2)[sls].ravel("F")
                 base.allocate_storage()
                 base.storage[:N] = cp.array(arr_np)
+
             else:
                 base = DensePureState(settings.cuDensity["ctx"], hilbert_dims, 1, "complex128")
                 sizes, offsets = base.local_info
@@ -110,7 +107,7 @@ class CuState(Data):
 
     def to_cupy(self, as_tensor=False):
         # TODO: Would this work with mpi?
-        if self.base.local_info[0][::-1] != self.base.hilbert_space_dims:
+        if self.base.local_info[0][:-1] != self.base.hilbert_space_dims:
             raise NotImplementedError("Not Implemented for MPI distributed array.")
         tensor = self.base.view()[..., 0]
         if not as_tensor:

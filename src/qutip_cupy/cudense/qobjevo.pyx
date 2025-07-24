@@ -10,7 +10,7 @@ from qutip import Qobj
 
 from .state import zeros_like_cuState, CuState
 from .cudense import CuOperator
-from .utils import wrap_coeff, wrap_funcelement
+from .callable import wrap_coeff, wrap_funcelement
 
 
 # TODO: Being child class of QobjEvo needed? Or duck typing good enough?
@@ -58,9 +58,7 @@ cdef class CuQobjEvo(QobjEvo):
                 ), coeff)
             else:
                 oper = wrap_funcelement(*part, dual, self.hilbert_space_dims)
-                self.operator.append(qobj.data.to_OperatorTerm(
-                    dual, hilbert_dims=self.hilbert_space_dims
-                ))
+                self.operator.append(oper)
 
 
     cpdef Data matmul_data(CuQobjEvo self, object t, Data state, Data out=None):
