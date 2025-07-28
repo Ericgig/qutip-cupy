@@ -1,13 +1,19 @@
 import numpy as np
+import cupy as cp
 import pytest
 cudense = pytest.importorskip("cuquantum.densitymat")
 
 import qutip
 import qutip_cupy
-from qutip_cupy import CuState, CuOperator
+from qutip_cupy.cudense import CuState, CuOperator
+from qutip_cupy.cudense.cudense import ProdTerm, Term
+from qutip_cupy.cudense.utils import Transform
+
 import qutip.core.data as _data
 import qutip.tests.core.data.test_mathematics as test_tools
-from qutip.tests.core.data import conftest
+from qutip.tests.core.data.conftest import (
+    random_csr, random_dense, random_diag
+)
 
 
 def random_pure_custate(hilbert):
@@ -30,30 +36,79 @@ def random_mixed_custate(hilbert):
     return CuState(out, hilbert, copy=False)
 
 
+def _rand_transform(gen):
+    """
+    Random transform between raw, dag, T, conj, with bias toward common cases.
+    """
+    return gen.choice(list(Transform), p=[0.4, 0.15, 0.15, 0.3])
+
+
+def _rand_elementary_oper(size, gen):
+    if gen.uniform() < 0.5:
+        mat = random_diag((size, size), gen.uniform()*0.4, False, gen)
+    elif gen.uniform() < 0.8:
+        mat = random_dense((size, size), gen.uniform() > 0.5, gen)
+    else
+        mat = random_csr((size, size), gen.uniform()*0.4, False, gen)
+
+    if gen.uniform() < 0.5:
+        array_type = np if gen.uniform() < 0.5 else cp
+        if isinstance(mat, _data.Dia):
+            dia_matrix = oper.as_scipy()
+            offsets = list(dia_matrix.offsets)
+            data = array_type.zeros(
+                (dia_matrix.shape[0], len(offsets)),
+                dtype=complex,
+            )
+            for i, offset in enumerate(offsets):
+                end = None if offset == 0 else -abs(offset)
+                data[:end, i] = dia_matrix.diagonal(offset)
+            mat = cudense.MultidiagonalOperator(data, offsets)
+
+        else:
+            mat = cudense.DenseOperator(array_type.array(oper.to_array()))
+
+    return mat
+
+
+def random_CuOperator(hilbert_dims, N_elementary, seed):
+    """
+    Generate a random `CuOperator` matrix with the given hilbert_dims.
+    """
+    generator = np.random.default_rng(seed)
+    out = CuOperator(hilbert_dims=hilbert)
+    for N in N_elementary:
+        term = Term([], generator.normal() + 1j * generator.normal())
+        for _ in range(N):
+            mode = np.random.randint(len(hilbert))
+            size = abs(hilbert[mode])
+            oper = _rand_elementary_oper(size, gen)
+
+            term.prod_terms.append(ProdTerm(oper, mode, _rand_transform(gen)))
+        out.terms.append(term)
+    return out
+
+
 def cases_cuoperator(hilbert):
     """Generate a random `CuPyDense` matrix with the given shape."""
-    def factory(N_oper, mix=False):
-        # TODO, add single operator acting on multiple mode.
-        out = CuOperator(hilbert_dims=hilbert)
-        for N in N_oper:
-            part = 1.
-            for _ in range(N):
-                mode = np.random.randint(len(hilbert))
-                size = abs(hilbert[mode])
-                if np.random.randint(2):
-                    part = conftest.random_dense((size, size), np.random.randint(2))
-                else:
-                    part = conftest.random_diag((size, size), 0.4, False)
-                part = part * CuOperator(part, mode=(mode,), hilbert_dims=hilbert)
-            out = out + part
 
-    return [
-        pytest.param(factory([]), id="zero"),
-        pytest.param(factory([1]), id="simple"),
-        pytest.param(factory([3]), id="m_prods"),
-        pytest.param(factory([1, 1, 1]), id="m_terms"),
-        pytest.param(factory([2, 3, 4], True), id="complex"),
-    ]
+    def factory(N_elementary, seed):
+        return lambda: random_CuOperator(hilbert, N_elementary, seed)
+
+    cases = []
+
+    cases.append(pytest.param(factory([], 0), id="zero"))
+    cases.append(pytest.param(factory([0], 0), id="id"))
+    seed = random.randint(0, 2**31)
+    cases.append(pytest.param(factory([1], seed), id=f"simple_{seed}"))
+    seed = random.randint(0, 2**31)
+    cases.append(pytest.param(factory([3], seed), id=f"3_prods_{seed}"))
+    seed = random.randint(0, 2**31)
+    cases.append(pytest.param(factory([1, 1, 1], seed), id=f"3_terms_{seed}"))
+    seed = random.randint(0, 2**31)
+    cases.append(pytest.param(factory([1, 2, 3], seed), id=f"complex_{seed}"))
+
+    return cases
 
 
 test_tools._ALL_CASES = {
@@ -63,9 +118,10 @@ test_tools._ALL_CASES = {
     ],
     CuOperator: cases_cuoperator,
 }
+
 test_tools._RANDOM = {
     CuState: lambda shape: [],
-    CuOperator: lambda shape: [],
+    CuOperator: lambda hilbert: [lambda: random_CuOperator(hilbert, [2], 0)],
 }
 
 _unary_hilbert = [
