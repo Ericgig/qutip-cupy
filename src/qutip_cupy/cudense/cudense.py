@@ -51,7 +51,7 @@ def _transpose_cu_operator(mat):
     return out
 
 
-def _to_array(oper, transform):
+def _oper_to_array(oper, transform):
     if isinstance(oper, _data.Data):
         arr = oper.to_array()
 
@@ -333,7 +333,7 @@ class CuOperator(Data):
         for term in self.terms:
             termmat = np.eye(self.shape[0], dtype=complex) * term.factor
             for prod_term in term.prod_terms:
-                mat = _to_array(prod_term.operator, prod_term.transform)
+                mat = _oper_to_array(prod_term.operator, prod_term.transform)
 
                 try:
                     # if cupy array, get numpy
@@ -342,7 +342,7 @@ class CuOperator(Data):
                     pass
 
                 if len(mat.shape) > 2:
-                    raise RunTimeError("_to_array no up to date")
+                    raise RunTimeError("_oper_to_array no up to date")
                     # mat = mat.reshape(oper.shape + (-1,))[:, :, 0]
 
                 idxs = list(range(len(hilbert)))

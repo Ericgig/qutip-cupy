@@ -1,11 +1,12 @@
 import numpy as np
 import cupy as cp
 import pytest
+import random
 cudense = pytest.importorskip("cuquantum.densitymat")
 
 import qutip
 import qutip_cupy
-from qutip_cupy.cudense import CuState, CuOperator
+from qutip_cupy.cudense import CuOperator
 from qutip_cupy.cudense.cudense import ProdTerm, Term
 from qutip_cupy.cudense.utils import Transform
 
@@ -14,26 +15,6 @@ import qutip.tests.core.data.test_mathematics as test_tools
 from qutip.tests.core.data.conftest import (
     random_csr, random_dense, random_diag
 )
-
-
-def random_pure_custate(hilbert):
-    """Generate a random `CuPyDense` matrix with the given shape."""
-    N = abs(np.prod(hilbert))
-    out = (
-        cp.random.rand(N, 1) + 1j * cp.random.rand(N, 1)
-    ).astype(cp.complex128)
-    out = qutip_cupy.CuPyDense._raw_cupy_constructor(out)
-    return CuState(out, hilbert, copy=False)
-
-
-def random_mixed_custate(hilbert):
-    """Generate a random `CuPyDense` matrix with the given shape."""
-    N = abs(np.prod(hilbert))
-    out = (
-        cp.random.rand(N, N) + 1j * cp.random.rand(N, N)
-    ).astype(cp.complex128)
-    out = qutip_cupy.CuPyDense._raw_cupy_constructor(out)
-    return CuState(out, hilbert, copy=False)
 
 
 def _rand_transform(gen):
@@ -112,15 +93,10 @@ def cases_cuoperator(hilbert):
 
 
 test_tools._ALL_CASES = {
-    CuState: lambda hilbert: [
-        lambda: random_pure_custate(hilbert),
-        lambda: random_mixed_custate(hilbert),
-    ],
     CuOperator: cases_cuoperator,
 }
 
 test_tools._RANDOM = {
-    CuState: lambda shape: [],
     CuOperator: lambda hilbert: [lambda: random_CuOperator(hilbert, [2], 0)],
 }
 
@@ -150,6 +126,90 @@ _imcompatible_hilbert = [
     ((2, 3, -4), (6, 2, 2)),
     ((-2, -4), (4, -2)),
 ]
+
+
+@pytest.marks.parametrize("shape", [(1, 1), (100, 100)])
+def test_zeros(shape):
+    oper = _data.zeros[CuOperator](shape)
+    assert np.all(oper.to_array() == 0.)
+    assert oper.shape == shape
+    assert oper.to_array.shape == shape
+    assert len(oper.terms) == 0
+
+
+@pytest.marks.parametrize("N", [1, 100])
+def test_id(N):
+    oper = _data.identity[CuOperator](N)
+    assert np.all(oper.to_array() == np.eye(N))
+    shape = (N, N)
+    assert oper.shape == shape
+    assert oper.to_array.shape == shape
+    assert len(oper.terms) == 1
+    assert len(oper.terms.prod_terms) == 0
+
+
+@pytest.marks.parametrize(["N_diag", "size"], [
+    (1, 1),
+    (1, 10),
+    (3, 2),
+    (2, 10),
+    (5, 25),
+])
+def test_diag(N_diag, size):
+    diags = []
+    offsets = list(range(-size + 1, size))
+    random.shuffle(offsets)
+    offsets = offsets[:N_diag]
+    for offset in offsets:
+        N = size - abs(offset)
+        diags.append(np.random.randn(N) + 1j * np.random.randn(N))
+
+    oper_cuoper = _data.diag[CuOperator](diags, offsets)
+    oper_dia = _data.diag["Dia"](diags, offsets)
+    assert np.all(oper_cuoper.to_array() == oper_dia.to_array())
+
+
+def test_permute():
+    X = qutip.sigmax(dtype=CuOperator)
+    Y = qutip.sigmay(dtype=CuOperator)
+    Z = qutip.sigmaz(dtype=CuOperator)
+    I = qutip.qeye(2, dtype=CuOperator)
+
+    oper = X & Y & Z & I
+    new = _data.permute.dimensions(oper.data, [1, 3, 0, 2])
+    target = Y & I & X & Z
+
+    assert np.all(new.to_array() == target.full())
+
+
+_qeye = lambda N: lambda : qutip.qeye(N)
+_destroy = lambda N: lambda : qutip.destroy(N)
+
+
+def _cplx(N):
+    def func():
+        return (
+            (qutip.create(N) & qutip.qeye(2))
+            + ( qutip.qeye(N)) & qutip.sigmax() )
+            + ( (qutip.destroy(N) @ qutip.create(N)) & qutip.sigmay() )
+        )
+
+    return func
+
+
+@pytest.marks.parametrize(["left", "right", "expected"], [
+    pytest.param(_qeye(3), _qeye(3), True, id="qeye", marks=pytest.mark.xfail),
+    pytest.param(_qeye(2), _qeye(3), False, id="qeye_bad_size"),
+    pytest.param(_destroy(3), _destroy(4), False, id="destroy_bad_size"),
+    pytest.param(_qeye(3), _destroy(3), False, id="different"),
+    pytest.param(_destroy(4), _destroy(4), True, id="destroy", marks=pytest.mark.xfail),
+    pytest.param(_cplx(3), _cplx(3), True, id="complex", marks=pytest.mark.xfail),
+    pytest.param(_cplx(3), _qeye(4), False, id="complex_bad_size"),
+])
+def test_equal(left, right, expected):
+    left = left()
+    right = right()
+    assert (left.data == right.data) is expected
 
 
 class TestAdd(test_tools.TestAdd):
