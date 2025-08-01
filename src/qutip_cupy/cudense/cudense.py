@@ -520,7 +520,7 @@ class CuOperator(Data):
         return out
 
 
-def CuOperator_from_Dia():
+def CuOperator_from_Dia(mat):
     return CuOperator(mat)
 
 
