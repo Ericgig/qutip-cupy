@@ -123,7 +123,7 @@ _compatible_hilbert = [
 
 _imcompatible_hilbert = [
     (pytest.param((2,), id="single"), pytest.param((3,), id="single")),
-    (pytest.param((2, 3), id="double"), pytest.param((6), id="single")),
+    (pytest.param((2, 3), id="double"), pytest.param((6,), id="single")),
     (pytest.param((2, 3), id="double"), pytest.param((3, 2), id="single_weak")),
     (pytest.param((2, -4), id="double_weak"), pytest.param((4, -2), id="double_weak")),
     (pytest.param((2, 3, -4), id="complex"), pytest.param((6, 2, 2), id="complex")),
@@ -216,7 +216,7 @@ def test_equal(left, right, expected):
 
 class TestAdd(test_tools.TestAdd):
     specialisations = [
-        pytest.param(lambda x, y, s: x + y * s, CuOperator, CuOperator, CuOperator),
+        pytest.param(lambda x, y, s=1.: x + y * s, CuOperator, CuOperator, CuOperator),
     ]
 
     shapes = _compatible_hilbert

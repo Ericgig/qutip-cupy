@@ -22,6 +22,9 @@ from .utils import *
 
 __all__ = []
 
+# TODO: sanity check on mode as int instead of tuple
+# Input fixed in tests, but did not fail early
+
 
 def _transpose_cu_operator(mat):
     if isinstance(oper, MultidiagonalOperator):
@@ -61,9 +64,7 @@ def _oper_to_array(oper, transform):
         if isinstance(arr, cp.ndarray): arr = arr.get() # Convert CuPy to NumPy
 
     elif isinstance(oper, MultidiagonalOperator):
-        print("Make MultidiagonalOperator")
         for diag, offset in zip(oper.data[:, :, 0].T, oper.offsets):
-            print(np.diag(diag[:-abs(offset) or None], offset).shape, offset, diag[:-abs(offset) or None].shape)
         arr = sum(
             np.diag(diag[:-abs(offset) or None], offset)
             for diag, offset
@@ -351,16 +352,17 @@ class CuOperator(Data):
                     # mat = mat.reshape(oper.shape + (-1,))[:, :, 0]
 
                 idxs = list(range(len(hilbert)))
+                
                 sizes = []
                 for i in prod_term.hilbert:
-                    sizes.append(hilbert[idxs.pop(i)])
+                    sizes.append(hilbert[i])
+                for i in reversed(sorted(prod_term.hilbert)):
+                    del idxs[i]
 
                 for i in idxs:
                     N = hilbert[i]
                     mat = np.kron(mat, np.eye(N))
                     sizes.append(N)
-
-                print("to_array", mat.shape, sizes, np.argsort(list(prod_term.hilbert) + idxs))
 
                 mat = _data.permute.dimensions(
                     _data.Dense(mat),
@@ -586,7 +588,7 @@ def kron_CuOperator(left, right):
         copy_term = Term([], factor=term.factor)
         for pterm in term.prod_terms:
             copy_term.prod_terms.append(ProdTerm(
-                pterm.operator.copy(),
+                pterm.operator,
                 pterm.hilbert,
                 pterm.transform,
             ))
@@ -597,7 +599,7 @@ def kron_CuOperator(left, right):
         copy_term = Term([], factor=term.factor)
         for pterm in term.prod_terms:
             copy_term.prod_terms.append(ProdTerm(
-                pterm.operator.copy(),
+                pterm.operator,
                 tuple(i + N for i in pterm.hilbert),
                 pterm.transform,
             ))
