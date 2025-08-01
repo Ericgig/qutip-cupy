@@ -29,13 +29,13 @@ def _rand_elementary_oper(size, gen):
         mat = random_diag((size, size), gen.uniform()*0.4, False, gen)
     elif gen.uniform() < 0.8:
         mat = random_dense((size, size), gen.uniform() > 0.5, gen)
-    else
+    else:
         mat = random_csr((size, size), gen.uniform()*0.4, False, gen)
 
     if gen.uniform() < 0.5:
         array_type = np if gen.uniform() < 0.5 else cp
         if isinstance(mat, _data.Dia):
-            dia_matrix = oper.as_scipy()
+            dia_matrix = mat.as_scipy()
             offsets = list(dia_matrix.offsets)
             data = array_type.zeros(
                 (dia_matrix.shape[0], len(offsets)),
@@ -43,11 +43,11 @@ def _rand_elementary_oper(size, gen):
             )
             for i, offset in enumerate(offsets):
                 end = None if offset == 0 else -abs(offset)
-                data[:end, i] = dia_matrix.diagonal(offset)
+                data[:end, i] = array_type.asarray( dia_matrix.diagonal(offset) )
             mat = cudense.MultidiagonalOperator(data, offsets)
 
         else:
-            mat = cudense.DenseOperator(array_type.array(oper.to_array()))
+            mat = cudense.DenseOperator(array_type.array(mat.to_array()))
 
     return mat
 
@@ -57,15 +57,16 @@ def random_CuOperator(hilbert_dims, N_elementary, seed):
     Generate a random `CuOperator` matrix with the given hilbert_dims.
     """
     generator = np.random.default_rng(seed)
-    out = CuOperator(hilbert_dims=hilbert)
+    print(hilbert_dims)
+    out = CuOperator(hilbert_dims=hilbert_dims)
     for N in N_elementary:
         term = Term([], generator.normal() + 1j * generator.normal())
         for _ in range(N):
-            mode = np.random.randint(len(hilbert))
-            size = abs(hilbert[mode])
-            oper = _rand_elementary_oper(size, gen)
+            mode = np.random.randint(len(hilbert_dims))
+            size = abs(hilbert_dims[mode])
+            oper = _rand_elementary_oper(size, generator)
 
-            term.prod_terms.append(ProdTerm(oper, mode, _rand_transform(gen)))
+            term.prod_terms.append(ProdTerm(oper, (mode,), _rand_transform(generator)))
         out.terms.append(term)
     return out
 
@@ -101,34 +102,35 @@ test_tools._RANDOM = {
 }
 
 _unary_hilbert = [
-    (2,),
-    (3,),
-    (-6,),
-    (2, 3),
-    (-2, 2, 2),
-    (2, 3, -4),
+    (pytest.param((1,), id="scalar"),),
+    (pytest.param((3,), id="single"),),
+    (pytest.param((-6,), id="single_weak"),),
+    (pytest.param((2, 3), id="double"),),
+    (pytest.param((-2, -4), id="double_weak"),),
+    (pytest.param((2, 3, -4), id="complex"),),
+
 ]
 
 
 _compatible_hilbert = [
-    ((2, ), (2, )),
-    ((2, 3), (2, 3)),
-    ((2, 3), (-6, )),
-    ((2, 3, -4), (-6, 2, 2)),
-    ((2, -4), (-4, 2)),
+    (pytest.param((2,), id="single"), pytest.param((2,), id="single")),
+    (pytest.param((2, 3), id="double"), pytest.param((2, 3), id="double")),
+    (pytest.param((2, 3), id="double"), pytest.param((-6,), id="single_weak")),
+    (pytest.param((2, -4), id="double_weak"), pytest.param((-4, 2), id="double_weak")),
+    (pytest.param((2, 3, -4), id="complex"), pytest.param((-6, 2, 2), id="complex")),
 ]
 
 
 _imcompatible_hilbert = [
-    ((2, ), (3, )),
-    ((2, 3), (6)),
-    ((2, 3), (3, 2)),
-    ((2, 3, -4), (6, 2, 2)),
-    ((-2, -4), (4, -2)),
+    (pytest.param((2,), id="single"), pytest.param((3,), id="single")),
+    (pytest.param((2, 3), id="double"), pytest.param((6), id="single")),
+    (pytest.param((2, 3), id="double"), pytest.param((3, 2), id="single_weak")),
+    (pytest.param((2, -4), id="double_weak"), pytest.param((4, -2), id="double_weak")),
+    (pytest.param((2, 3, -4), id="complex"), pytest.param((6, 2, 2), id="complex")),
 ]
 
 
-@pytest.marks.parametrize("shape", [(1, 1), (100, 100)])
+@pytest.mark.parametrize("shape", [(1, 1), (100, 100)])
 def test_zeros(shape):
     oper = _data.zeros[CuOperator](shape)
     assert np.all(oper.to_array() == 0.)
@@ -137,7 +139,7 @@ def test_zeros(shape):
     assert len(oper.terms) == 0
 
 
-@pytest.marks.parametrize("N", [1, 100])
+@pytest.mark.parametrize("N", [1, 100])
 def test_id(N):
     oper = _data.identity[CuOperator](N)
     assert np.all(oper.to_array() == np.eye(N))
@@ -148,7 +150,7 @@ def test_id(N):
     assert len(oper.terms.prod_terms) == 0
 
 
-@pytest.marks.parametrize(["N_diag", "size"], [
+@pytest.mark.parametrize(["N_diag", "size"], [
     (1, 1),
     (1, 10),
     (3, 2),
@@ -190,14 +192,14 @@ def _cplx(N):
     def func():
         return (
             (qutip.create(N) & qutip.qeye(2))
-            + ( qutip.qeye(N)) & qutip.sigmax() )
+            + ( qutip.qeye(N) & qutip.sigmax() )
             + ( (qutip.destroy(N) @ qutip.create(N)) & qutip.sigmay() )
         )
 
     return func
 
 
-@pytest.marks.parametrize(["left", "right", "expected"], [
+@pytest.mark.parametrize(["left", "right", "expected"], [
     pytest.param(_qeye(3), _qeye(3), True, id="qeye", marks=pytest.mark.xfail),
     pytest.param(_qeye(2), _qeye(3), False, id="qeye_bad_size"),
     pytest.param(_destroy(3), _destroy(4), False, id="destroy_bad_size"),
@@ -214,7 +216,7 @@ def test_equal(left, right, expected):
 
 class TestAdd(test_tools.TestAdd):
     specialisations = [
-        pytest.param(lambda x, y, s; x + y * s, CuOperator, CuOperator, CuOperator),
+        pytest.param(lambda x, y, s: x + y * s, CuOperator, CuOperator, CuOperator),
     ]
 
     shapes = _compatible_hilbert
@@ -223,7 +225,7 @@ class TestAdd(test_tools.TestAdd):
 
 class TestSub(test_tools.TestSub):
     specialisations = [
-        pytest.param(lambda x, y; x - y, CuOperator, CuOperator, CuOperator),
+        pytest.param(lambda x, y: x - y, CuOperator, CuOperator, CuOperator),
     ]
 
     shapes = _compatible_hilbert
@@ -232,7 +234,7 @@ class TestSub(test_tools.TestSub):
 
 class TestMatmul(test_tools.TestMatmul):
     specialisations = [
-        pytest.param(lambda x, y; x @ y, CuOperator, CuOperator, CuOperator),
+        pytest.param(lambda x, y: x @ y, CuOperator, CuOperator, CuOperator),
     ]
 
     shapes = _compatible_hilbert

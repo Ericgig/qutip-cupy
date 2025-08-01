@@ -61,8 +61,11 @@ def _oper_to_array(oper, transform):
         if isinstance(arr, cp.ndarray): arr = arr.get() # Convert CuPy to NumPy
 
     elif isinstance(oper, MultidiagonalOperator):
+        print("Make MultidiagonalOperator")
+        for diag, offset in zip(oper.data[:, :, 0].T, oper.offsets):
+            print(np.diag(diag[:-abs(offset) or None], offset).shape, offset, diag[:-abs(offset) or None].shape)
         arr = sum(
-            np.diag(diag[:abs(offset) or None], offset)
+            np.diag(diag[:-abs(offset) or None], offset)
             for diag, offset
             in zip(oper.data[:, :, 0].T, oper.offsets)
         )
@@ -179,6 +182,8 @@ class CuOperator(Data):
         self.hilbert_dims = ()
         self._oper = None
         oper_shape = None
+        if isinstance(mode, int):
+            mode = (mode,)
 
         if arg is None:
             if hilbert_dims is None and shape is None:
@@ -354,6 +359,8 @@ class CuOperator(Data):
                     N = hilbert[i]
                     mat = np.kron(mat, np.eye(N))
                     sizes.append(N)
+
+                print("to_array", mat.shape, sizes, np.argsort(list(prod_term.hilbert) + idxs))
 
                 mat = _data.permute.dimensions(
                     _data.Dense(mat),
