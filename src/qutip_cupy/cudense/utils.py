@@ -92,9 +92,9 @@ def _compare_hilbert(left, right, return_shifts=False):
             return False
 
     if return_shifts:
-        return out_hilbert, shifts_left, shifts_right
+        return tuple(out_hilbert), shifts_left, shifts_right
     else:
-        return out_hilbert
+        return tuple(out_hilbert)
 
 
 def Oper_to_cupy(oper, ctx):

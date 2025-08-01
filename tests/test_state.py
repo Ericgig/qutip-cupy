@@ -2,6 +2,8 @@ import numpy as np
 import cupy as cp
 import pytest
 import random
+import numbers
+from itertools import product
 cudense = pytest.importorskip("cuquantum.densitymat")
 
 import qutip
@@ -117,8 +119,8 @@ class TestAdd(test_tools.TestAdd):
 
 class TestMul(test_tools.TestMul):
     specialisations = [
-        pytest.param(mul_cuState: op * scale, CuState, CuState),
-        pytest.param(imul_cuState: op * scale, CuState, CuState),
+        pytest.param(mul_cuState, CuState, CuState),
+        pytest.param(imul_cuState, CuState, CuState),
     ]
 
     shapes = _unary_pure + _unary_mixed
@@ -136,7 +138,7 @@ class TestFrobeniusNorm(test_norm.TestFrobeniusNorm):
 
 class TestInner(test_tools.TestInner):
     specialisations = [
-        pytest.param(inner_cuState, CuState, complex),
+        pytest.param(inner_cuState, CuState, CuState, complex),
     ]
 
     shapes = _unary_pure

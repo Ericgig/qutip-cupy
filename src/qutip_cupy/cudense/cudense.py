@@ -64,7 +64,7 @@ def _oper_to_array(oper, transform):
         if isinstance(arr, cp.ndarray): arr = arr.get() # Convert CuPy to NumPy
 
     elif isinstance(oper, MultidiagonalOperator):
-        for diag, offset in zip(oper.data[:, :, 0].T, oper.offsets):
+        # for diag, offset in zip(oper.data[:, :, 0].T, oper.offsets):
         arr = sum(
             np.diag(diag[:-abs(offset) or None], offset)
             for diag, offset
