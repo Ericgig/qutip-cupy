@@ -521,14 +521,16 @@ class CuOperator(Data):
 
 
 def CuOperator_from_Dia(mat):
+    if mat.shape[0] != mat.shape[1]:
+        # TODO: This break the function
+        raise ValueError("Rectangular CuOperator are not supported")
     return CuOperator(mat)
 
 
 def CuOperator_from_Dense(mat):
     if mat.shape[0] != mat.shape[1]:
         # TODO: This break the function
-        print("Trying to convert rectangular operator to CuOperator")
-        return mat
+        raise ValueError("Rectangular CuOperator are not supported")
     return CuOperator(mat)
 
 
