@@ -45,7 +45,7 @@ def set_as_default(ctx):
 
     # settings.core["default_dtype_scope"] = "full"
     if True:  # if mpi:
-        qt.settings.core["auto_real_casting"] = False
+        qutip.settings.core["auto_real_casting"] = False
 
     qutip.SESolver.solver_options['method'] = "CuVern7"
     qutip.MESolver.solver_options['method'] = "CuVern7"
